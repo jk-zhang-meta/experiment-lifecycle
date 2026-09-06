@@ -1,0 +1,4 @@
+interface:
+  display_name: "Experiment Lifecycle"
+  short_description: "Bind research results to exact code, data, runs, and resources"
+  default_prompt: "Use $experiment-lifecycle to plan, execute, verify, and trace this experiment end to end."
