@@ -1,292 +1,203 @@
 ---
 name: experiment-lifecycle
-description: Create, execute, verify, compare, and archive reproducible computational experiments by binding each result to an immutable question, code snapshot, configuration, data/model revision, protocol, environment, randomness, executor, resource receipt, and explicit output index. Use when an agent plans or runs a research experiment, benchmark, ablation, training/evaluation job, hyperparameter sweep, or needs to trace an existing result back to exact code and artifacts. Do not use for literature-only work, ordinary unit tests, or a job submission that explicitly requests only a job ID.
+description: Plan and verify software tests, representative dev validation, and full scientific experiments in one lifecycle. Use for unit/integration/end-to-end checks, dataset sampling, model loading, GPU capacity and scheduling, benchmarks, training, evaluation, ablations, sweeps, monitored parallel runs, recovery, reusable intermediates, and complete evidence retention. Scale evidence to engineering versus scientific claims; dev success never substitutes for formal completion. Do not use for literature-only work.
 ---
 
 # Experiment lifecycle
 
-## Reusing immutable artifacts
+Own the scientific lifecycle from question to retained evidence. Optimize useful
+verified progress per scarce resource while completing the user's full research
+contract. A first verified dev result is a milestone, never a substitute for
+the required full experiment. Retain intermediate, failed, superseded, and final
+research evidence; reduce duplicate bookkeeping, not evidence coverage.
 
-Large datasets, models, configurations, checkpoints, and analysis inputs may
-be reused through symlinks declared in the experiment spec. Each reuse record
-must include an artifact id, immutable revision, SHA-256 digest, source
-provenance, destination under `inputs/`, and `access: "read-only"`.
+This Skill specifies behavior and evidence. The project executor enforces
+scheduling, monitoring and cancellation; the artifact store owns durable bytes.
+It does not install a scheduler, grant compute access, or make a prose instruction
+into an unattended watchdog. Use existing project facilities when they satisfy
+the contracts; filenames and tracking products are not scientific guarantees.
 
-`link-artifact` rejects symlink sources, existing destinations, and destinations
-outside the experiment root. `verify-reuse` resolves the link and re-hashes the
-target. Shared sources must be in an approved immutable store and must never be
-under an active experiment output directory. Deleting an experiment removes
-only its links, never the source object.
+## Read what the task needs
 
-A symlink alone cannot prevent writes: the executor must enforce a read-only
-bind mount, container mount, or equivalent ACL/identity boundary and record the
-method in the execution receipt. If that evidence is unavailable, the run may
-be prepared but cannot claim read-only enforcement. Copying is an allowed
-fallback only when the copy is independently hashed and never writes back.
+- Before experiment design or dev selection: [study protocol](references/dev-validation.md).
+- Before producing, consuming, reusing, recovering, or retaining artifacts:
+  [artifact contract](references/lifecycle.md).
+- Before parallel, expensive, detached, or long execution:
+  [execution and monitoring](references/lifecycle.md).
+- Before model loading, GPU capacity probing, placement or GPU scheduling:
+  [GPU execution](references/gpu-execution.md).
+- For current helper support and deployment boundaries:
+  [compatibility and migration](README.md).
+- For rationale and source limits: [research basis](references/research-basis.md).
+- For Skill/adaptor validation: [acceptance cases](references/evaluation.md).
 
-Reuse paths are inputs; outputs, checkpoints, logs, and receipts remain
-exclusive regular files under the current execution. Input digest drift at
-launch or seal fails verification. Artifact content, revision, schema, split,
-or preprocessing changes create a new semantic attempt; changing only a link
-path or materialization method creates a new execution or requires revalidation.
+Use available canonical-state, resource-guard, runtime-hygiene
+and project verification facilities only for applicable surfaces. Keep one
+scientific lifecycle owner. A graph coordinator may manage durable dependencies;
+it must not impose a second completion rule or schedule individual GPU work in
+competition with the project's executor.
 
-Use this Skill as the experiment identity and evidence layer. It does not grant
-SSH, scheduler, GPU, deletion, publication, or production authority. Compose it
-with `canonical-state`, `first-verified-result`, `resource-guard`,
-`runtime-hygiene`, `gpu-experiment`, and `verified-operations` when those
-surfaces apply.
+GPU planning is part of this Skill, not another lifecycle. Bind the explicit
+device/model allowlists, measure headroom and useful throughput, and admit only
+ready work within aggregate budgets. Capacity probes cannot silently change
+scientific factors. Preserve a terminal status and evidence for every required
+model/configuration/seed row; idle hardware does not expand authorization.
 
-## The non-negotiable model
+## Choose the validation lane
 
-Keep these identities separate:
+Use this one Skill as the testing and experiment entrypoint. For an ordinary
+software test, identify the behavior/change, use the project's existing test
+runner and smallest relevant unit/integration/end-to-end checks, retain exact
+command/code identity, result and useful failure evidence, and stop when that
+engineering oracle is met. Do not manufacture scientific hypotheses, dataset
+splits, research manifests or GPU runs for ordinary tests. Respect applicable
+UI isolation and resource controls.
 
-```text
-experiment (scientific question)
-  -> semantic attempt (what changed scientifically)
-      -> execution (where/how this attempt was physically run)
-          -> outputs and receipts
-```
+For dataset-based development or scientific claims, follow the lifecycle below.
+An engineering pass establishes implementation evidence only. A dev pass
+establishes the declared coverage/readiness gate only. A formal empirical claim
+requires the full scientific contract. Use targeted test-first/debugging methods
+when requested or needed, without creating another lifecycle owner.
 
-Use the bundled `references/manifest-schema.md` for the exact fields and
-the `scripts/experiment.mjs` helper for deterministic record creation and
-verification. The helper is intentionally shell-free and has no network or
-tracking-service dependency.
+## 1. Establish the study and execution contract
 
-- A code/config/data/model/protocol/environment/seed/factor/oracle change is a
-  new semantic attempt.
-- A node failure, pre-emption, or infrastructure retry with an identical
-  semantic fingerprint is a new execution of the same attempt.
-- If equality is uncertain, create a new attempt. Never reuse `latest` or pick
-  a result by modification time.
-- Record change classes explicitly (`feature`, `bugfix`, `refactor`, `config`,
-  `data`, `model`, `environment`, `protocol`, `benchmark`, `reproduction`, or
-  `unknown`); do not infer a scientific class from a diff summary.
+Resolve from the request and project evidence:
 
-## Intake: ask only for missing decision-bearing facts
+- question, falsifiable hypothesis, estimand/comparison, baseline, conditions,
+  metrics, uncertainty method, required repetitions and input membership;
+- exploratory versus confirmatory use, dev/tuning/final-evaluation boundaries,
+  missingness/exclusion rules and scientific stopping criteria;
+- code and dependency snapshot, effective config, data/model identities,
+  randomness and any hardware/execution factors that can change results;
+- resource allowlist/allocation, aggregate budgets, storage capacity and retention;
+- stage inputs/outputs, validators, monitoring owner, stop scope and latency;
+- expected full-study completion evidence and recoverable artifact locations.
 
-Before launch, resolve the canonical project root and create a host-local spec
-under `~/.agent-work`. Ask a focused question if any of these is missing or
-ambiguous:
+Infer routine implementation details from evidence. Ask only about missing
+scientific choices, authorization, or material guarantees. Do not force the user
+to supply machine-readable metadata the agent can collect. Record unknowns
+explicitly; a missing critical guarantee blocks the dependent launch only.
 
-1. What question, feature/function being evaluated, falsifiable hypothesis,
-   baseline/candidate comparison, metrics, validity bounds, and stopping rule
-   does the run answer?
-2. Which repository/commit/tree and relevant files are the source? Is the tree
-   clean, or where is the complete approved dirty patch snapshot?
-3. Which exact config, data split/preprocessing, model revision, protocol, and
-   dependency/environment identities are effective?
-4. Which seeds, factor values, number of runs, and required output rows/shards
-   are expected?
-5. Which executor/job identity, output/checkpoint roots, and CPU/RAM/I/O/
-   network/GPU budgets are authorized? Is hardware a scientific factor?
-6. Which project validator will produce a report naming this manifest digest,
-   what makes a row complete and a metric valid, and which analysis code/method
-   will interpret the result?
+Freeze a study revision before formal computation. Each stage has a declared
+dependency closure and input contract. Use independent partition edges when
+valid, keyed joins where needed, and full barriers only for actual global
+dependencies. Record all required outputs, not just final metrics.
 
-The manifest is the join key for the whole research story: the entrypoint
-path/symbol and argv identify the code path; config/data/model/protocol and
-environment digests identify what it means; factors and seeds identify the
-experimental condition; the output index and analysis artifact identify what
-was produced and how it was interpreted. If the analysis method or research
-question changes, create a new semantic attempt even when the training code
-is unchanged.
+## 2. Develop on representative subsets
 
-Do not ask ceremonial confirmation for information already present in a trusted
-project contract or explicit request. Do not silently fill an unknown with a
-default that changes the scientific interpretation.
+Inventory the exact dataset revision/split and all task categories before selection.
+Read the dev protocol's population, quota, grouping and readiness requirements.
+Select a versioned dev set covering task strata, rare/boundary cases and resource
+extremes. Separate a distribution-matched core from tagged coverage/stress additions;
+report per-stratum counts, proportions, missing cells and sampling limitations. Preserve membership, selection code, seed, rationale and limitations.
+Reuse the real code path and artifact/monitoring mechanisms at dev scale.
 
-For sweeps or factorial studies, declare `spec.matrix.axes`. `init` sorts the
-axes canonically, derives stable `conditionId` values, and writes an immutable
-attempt-level `MATRIX.json`. Sealing then requires `--matrix-report` containing
-exactly one terminal status per condition (`completed`, `failed`, `blocked`, or
-`excluded-with-reason`), preventing partial or duplicated grids from appearing
-complete.
+Check correctness, scientific sanity, resource demand, artifact commit/restore,
+failure detection and bounded cancellation. Expand the dev set after uncovered
+failure modes; preserve earlier revisions and executions. Never quietly redefine
+the held-out evaluation set or tune against its outcomes.
 
-## Storage and initialization
+Use the first trustworthy dev result to decide the next step. Before scaling,
+require an adequate dev coverage report, working evidence path and stop mechanism,
+and a measured resource forecast with uncertainty. A canary prefix of the formal
+run may validate scale behavior while monitoring remains active throughout.
+Dev and formal runs share lineage, not an assumed scientific equivalence.
 
-Keep the clean Git checkout (including `.git`, source, docs, and small configs)
-in its declared canonical location. Put the spec, run metadata, logs,
-checkpoints, caches, and generated outputs in a registered host-local runtime or
-the remote executor's local work root. Never build or emit intermediates under
-OneDrive/CloudStorage. Register a new runtime directory with `runtime-hygiene`
-before substantive work.
+## 3. Assign identity at the right level
 
-Create the four-layer tree with:
+Keep study revision, condition, stage recipe, physical execution and artifact
+version distinguishable. Native identifiers may encode these without separate
+files for every concept. Preserve full source history while allowing unchanged
+stage outputs to be reused across new downstream recipes.
 
-```sh
-node <this-skill>/scripts/experiment.mjs init \
-  --spec <runtime>/experiment-spec.json --runtime-root <runtime-root>
-```
+Scientific input/code/config/protocol/randomness changes create a new relevant
+condition or recipe and study amendment when interpretation changes. Identical
+infrastructure retries create fresh executions with parent links. Unknown
+equivalence is not a retry. A cached stochastic sample is not a new replicate.
 
-`init` writes write-once `EXPERIMENT.json`, `ATTEMPT.json`, and `RUN.json`.
-It captures Git commit/tree and scoped file digests, validates immutable input
-identities, computes the semantic fingerprint and IDs, records an execution
-plan (including expected duration/resource budget), and refuses unsafe paths,
-dirty sources without a complete patch, missing required fields, or overwrites.
-Use `--retry-of <RUN.json>` only for a proven identical semantic spec; it creates
-a fresh execution directory and preserves the parent execution link.
+Before submission, persist intent and a provider idempotency key when supported.
+Immediately bind the returned job identity. Attach terminal/resource receipts
+when available; do not freeze future telemetry into the launch record. Lost
+submission replies require provider reconciliation before any resubmission.
 
-The returned paths and `runManifestDigest` are the only launch contract. Copy
-the manifest digest into command metadata, metric rows, logs, checkpoints, and
-resource receipts. Do not edit `RUN.json` after initialization.
+## 4. Pipeline committed artifacts under resource limits
 
-For multi-GPU or multi-endpoint work, never let workers read the full input
-manifest or write a shared result path. Declare `compute.partitioning` with an
-immutable item-manifest digest and shard count, then run:
+A consumer becomes eligible when its exact required artifact versions are
+committed, validated, available, compatible and not revoked, and its resource
+admission succeeds. It need not await unrelated producer partitions.
 
-```sh
-node <this-skill>/scripts/experiment.mjs plan-shards --run RUN.json \
-  --items <items.json> --out SHARD-PLAN.json
-```
+Write into execution-private staging; validate and durably commit each complete
+partition/checkpoint before announcing readiness. Growing files, log messages,
+mtime and queue notifications are not readiness evidence. Record exact input
+versions on every consumer and the selected producer generation.
 
-Each worker receives only its assigned item slice and writes under its exclusive
-`shards/<shard-id>/attempts/<worker-attempt-id>/` directory. It records endpoint,
-GPU/device IDs, item count and output digest with `record-shard`; the controller
-must run `verify-shards` and pass its `SHARD-CLOSURE.json` to `seal` as
-`--shard-report`. The closure rejects missing/duplicate input ownership, shared
-output paths, stale outputs, and non-successful shard attempts. A single merge
-step, after closure, creates the group-level result; retries get a new worker
-attempt directory and never append to a prior file.
+Overlap CPU preparation, GPU computation and CPU analysis where dependencies
+permit. Reserve aggregate CPU/RAM/VRAM/I/O/storage and limit in-flight tasks and
+buffered bytes. Apply backpressure at a declared high-water mark; resume below
+the low-water mark. Protect validator/monitor capacity. Favor useful completion
+and draining bottlenecks rather than utilization at any cost.
 
-Record recovery and analysis evidence with the bundled helper so they remain
-bound to the exact execution:
+Never parallelize across a scientific barrier: global fitting, normalization,
+order-sensitive state or a final all-input comparison needs the specified closed
+input set. A live aggregate is provisional and records its denominator/version.
 
-```sh
-node <this-skill>/scripts/experiment.mjs record-checkpoint --run RUN.json \
-  --out checkpoints/step-100.json --artifact checkpoints/step-100.pt \
-  --checkpoint-id step-100 --step 100
-node <this-skill>/scripts/experiment.mjs record-analysis --run RUN.json \
-  --out outputs/ANALYSIS.json --output-index output-index.json \
-  --analysis-id metrics-v1 --method "bootstrap 95% CI" \
-  --code-digest sha256:<64-hex> --config-digest sha256:<64-hex>
-```
+## 5. Monitor the full run and stop on bounded evidence
 
-Checkpoint records bind artifact digests, step and optional parent checkpoint;
-analysis records bind the exact output-index digest, analysis code/config and
-environment. A resume is valid only when the project executor also confirms
-the parent execution and semantic fingerprint; otherwise initialize a new
-attempt. If a `compute.resourceForecast` is supplied, it is retained as
-execution metadata (method, history, confidence, and observed-vs-forecast
-error) and never changes semantic identity.
+Inspect both operational signals and scientific artifacts throughout formal
+execution: structured errors/progress, missing/duplicate IDs, shapes, finite
+metrics, domain invariants, sampled semantic quality, resource pressure and
+committed-output lag. Logs supplement output validation; neither replaces it.
 
-## Execute and bind evidence
+Before detaching, prove a native monitor can enforce the declared thresholds
+and stop owned jobs within its timeout budget. Measure observation freshness.
+Missing monitoring beyond the declared deadline halts admission. Without a
+working unattended mechanism, keep execution attended and bounded.
 
-Run the project's real entrypoint from the WSL/remote stage through the normal
-executor. Use `resource-guard` for local or build-like commands and
-`gpu-experiment` for an allowlisted model/GPU matrix; those Skills control
-resources, while this Skill records the evidence. A useful GPU is not merely an
-idle visible device: record UUID/MIG, model, driver/CUDA, visible process,
-active/gpu seconds, utilization distribution, VRAM peak, power/energy and
-temperature when observable. Record CPU seconds, peak RSS, read/write bytes,
-PSI, wall/queue/setup/compute/postprocess durations, concurrency, throughput,
-and cost/energy estimates when available. Missing telemetry is `null` plus an
-`unobservable` reason, never zero.
+On a trigger: stop new affected dispatch, persist the reason/evidence, cancel
+or drain exact owned tasks according to the failure policy, and confirm terminal
+state. Integrity faults immediately block affected artifact consumption and
+invalidate descendants. Unknown impact expands the pause conservatively.
+Checkpoint/drain grace must be bounded; never preserve data by running invalid
+work indefinitely. Unknown cancellation remains unresolved resource exposure.
 
-After submission, bind the stable provider reference without mutating the run:
+## 6. Recover and reuse without hiding failures
 
-```sh
-node <this-skill>/scripts/experiment.mjs bind \
-  --run <...>/RUN.json --job-ref <provider-job-id> \
-  --executor-kind <local|ssh|slurm|k8s|...> --executor-target <target> \
-  --receipt resource=<.../resource.json> --receipt hardware=<.../gpu.json>
-```
+Preserve all executions, partial artifacts and diagnoses. Classify infrastructure,
+resource, implementation, data, scientific and observation failures separately.
+Retry only within the authorized class/count/cost budget. A low metric is not
+an infrastructure failure.
 
-The command writes one immutable `EXECUTION.json`; receipt JSON must name the
-same `runManifestDigest` and `executionId` (a digest alone is insufficient),
-and a path cannot be bound under two roles. Every sealed run requires resource
-and environment receipts; a non-empty GPU allowlist additionally requires a
-hardware receipt. Unobservable measurements are `null` plus an explanation,
-never a fabricated zero. The external scheduler remains the
-authority for queued/running/terminal status. Preserve failed attempts and
-partial evidence; do not blind-resubmit an ambiguous submission.
+Reuse an artifact only after checking its stage dependency fingerprint, bytes,
+validation contract, input coverage, stochastic semantics, retention/access and
+current invalidation state. An analysis bug need not rerun valid GPU inference;
+a tokenizer bug invalidates all dependent predictions, scores and conclusions.
+If affected scope is unproven, do not claim selective reuse is safe.
 
-Compilation and ordinary unit/integration tests are agent-owned engineering
-checks, not scientific attempts. Run them when they reduce execution risk, but
-do not create a new semantic attempt or make them required outputs merely
-because they ran. If a check is useful for audit or explains a result, write a
-small JSON receipt under `receipts/` (role `validation`, with `noise: true` and
-`artifactClass: "evidence"`) and bind it like any other receipt. A failed check
-must never create `COMPLETE.json` or be presented as an experimental result.
-Toolchain/lock changes that can alter the science belong in `environment` and
-therefore do create a new attempt.
+Resume from a committed compatible checkpoint with the project's required model,
+optimizer, scheduler, RNG, sampler and distributed state. Link the parent
+execution and checkpoint. A changed batch/order/topology may change science.
+Recheck consumers against revocation at dispatch and before accepting output.
 
-## Seal and verify
+## 7. Close results, analysis and retention separately
 
-The project-owned validator must run after authoritative terminal success and
-write a small JSON report such as:
+Artifact readiness, stage completion and study completion are separate claims.
+Full completion requires exact required coverage, authoritative accepted task
+outcomes, validated outputs, valid lineage, completed analysis and retained
+evidence. Accounting for a failed row does not make it scientifically complete.
 
-```json
-{
-  "schemaVersion": 1,
-  "status": "pass",
-  "runManifestDigest": "sha256:...",
-  "executionId": "ex-...",
-  "terminalState": "succeeded",
-  "checks": {"schema": "pass", "rows": "pass", "finite": "pass"},
-  "summary": {"rows": 12, "wallSeconds": 3600, "throughput": 2.4}
-}
-```
+Commit raw outputs first. Run analyses against immutable input collections, then
+commit analysis outputs. Final study closure references both; no output index
+may depend on an analysis record that must first read that same final index.
+Pair comparisons by stable IDs and preserve required denominators and uncertainty.
 
-Then seal only through the exact run path:
+Report dev-ready, running, stopping, blocked, failed/incomplete, or completed
+with the exact scope. A verified partition from a failed overall run can remain
+usable if its independent validity is proven. Retain negative results and
+explicit exclusions. Later invalidation retracts current conclusions without
+erasing their historical reports.
 
-```sh
-node <this-skill>/scripts/experiment.mjs seal \
-  --run <...>/RUN.json --oracle-report <...>/oracle.json [--shard-report <...>/SHARD-CLOSURE.json]
-node <this-skill>/scripts/experiment.mjs verify-run \
-  --run <...>/RUN.json
-```
-
-`seal` explicitly hashes every required output from the spec, verifies the
-execution binding and oracle identity, writes `output-index.json`, and writes
-`COMPLETE.json` last and atomically. Only the state
-
-```text
-authoritative terminal success
- + exact-attempt oracle pass
- + matching manifest/execution/output digests
- = VerifiedResult
-```
-
-is publishable. Otherwise report `ActiveRun`, `FailedRun`, or `BlockedRun` with
-the exact missing evidence. A successful process exit alone is not a result.
-
-Compare two records when a result seems mismatched:
-
-```sh
-node <this-skill>/scripts/experiment.mjs compare \
-  --left <old>/RUN.json --right <new>/RUN.json
-```
-
-The report identifies which dimension changed (code, config, data, model,
-protocol, environment, randomness, factor, oracle, or execution-only) and gives
-the correct new-attempt/retry recommendation.
-
-When a run tree is moved between hosts, `verify-source --source-root <absolute
-checkout>` may point at the corresponding checkout path. It still requires the
-recorded commit, tree, status, dirty-patch, and every scoped-file digest to
-match; this option is a path mapping, not a way to substitute a different
-source.
-
-## Publish and retain
-
-After `verify-run` passes, use the existing
-`runtime-hygiene/scripts/artifact-publish.mjs` with an explicit artifact list;
-never copy a build tree or use a glob. Record the resulting destination and
-manifest digest with a small `PUBLICATION.json` receipt. Keep `RUN.json`,
-`ATTEMPT.json`, `COMPLETE.json`, oracle/resource receipts, and failed-run
-summaries; let `runtime-hygiene` quarantine only registered rebuildable
-intermediates after lease/closure checks. Unknown directories and published
-finals are inventory-only.
-
-## Boundaries and tests
-
-Do not add a PAC-wide queue, polling daemon, mutable latest alias, unrestricted
-filesystem scan, hidden telemetry upload, or automatic scientific retry. Do
-not claim bit-identical results across different hardware unless the project
-oracle proves it; report statistical reproducibility and variance instead.
-
-For changes to this Skill, run its tests and the Profile validator. The test
-fixture must cover: distinct dimension changes, identical-semantic retry,
-dirty-source rejection, manifest tampering, output omission/duplication,
-oracle mismatch, atomic completion ordering, resource/GPU receipt gaps, and
-publication/cleanup preserving the provenance chain.
+Preserve the declared full evidence set in verified durable storage, including
+intermediates. Costly/research artifacts are not disposable caches. If storage
+is insufficient, backpressure or stop and resolve capacity; never silently
+delete, sample away, or keep only the best checkpoint. Verify retention and
+restore evidence, then report what is retained, where, and any remaining gaps.

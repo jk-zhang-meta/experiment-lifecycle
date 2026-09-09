@@ -1,5 +1,11 @@
 # Experiment lifecycle manifest schema
 
+This document describes the existing v1 helper format. The integrated Skill's
+scientific/testing behavior is defined in SKILL.md, dev-validation.md and
+lifecycle.md; project-native evidence may satisfy those contracts. Do not infer
+new dev-sampling, late-receipt, live monitoring, artifact readiness or revocation
+enforcement from the presence of a v1 record. See README.md for helper limits.
+
 This is the portable envelope used by `scripts/experiment.mjs`. Project
 validators may add scientific fields, but they must not remove the identity or
 integrity fields below. Paths in manifests are private metadata; output paths

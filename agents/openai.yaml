@@ -1,4 +1,4 @@
 interface:
   display_name: "Experiment Lifecycle"
-  short_description: "Bind research results to exact code, data, runs, and resources"
-  default_prompt: "Use $experiment-lifecycle to plan, execute, verify, and trace this experiment end to end."
+  short_description: "Unify tests, representative dev, and full research experiments"
+  default_prompt: "Use $experiment-lifecycle to choose the right test or experiment scope, validate representative dev coverage, and preserve verified evidence end to end."
