@@ -11,6 +11,8 @@
 GPU work uses the same dev, execution, artifact, recovery and completion rules
 as the rest of this Skill. This reference absorbs the former `gpu-experiment`
 capability. It does not introduce another scheduler, identity or completion gate.
+For expensive scale-up, apply [performance control](performance-control.md):
+matched capacity pilots, bounded tuning and feedback, and end-to-end reporting.
 
 ## Contract and inventory
 

@@ -89,3 +89,24 @@ tests. Live allocation, cancellation and telemetry require backend verification.
 | G08 | Numeric CUDA mask or MIG inventory lacks a proven mapping | Report unsupported/blocked inventory and use a verified provider adapter; no false device-access claim |
 | G09 | Monitor dies while detached GPU computation continues | Native independent enforcer halts admission and stops owned work within the declared deadline |
 | G10 | Old gpu-experiment command path was content-pinned | Refresh through the reviewed installer or use an authorized guarded route; no pin bypass |
+
+## Performance-control acceptance cases
+
+| ID | Scenario | Required behavior |
+| --- | --- | --- |
+| P01 | Ordinary unit test takes seconds | No mandatory throughput tuning or performance report |
+| P02 | Dev covers categories but misses longest inputs and full concurrent memory peaks | Correctness-ready is not capacity-ready; bounded tail and overlap pilots required |
+| P03 | GPU stage can consume partition 1 while preparation continues | Release validated partition 1 without an artificial full-stage barrier |
+| P04 | Scoring takes 4× longer; generation queue grows | Backpressure producer and improve scoring within budget; no extra generation workers |
+| P05 | More workers improve kernel timing but worsen whole-run completion | Reject claimed improvement; measure load, validation, writes and drain costs |
+| P06 | Candidate measured warm, baseline cold or with different input mix | Re-measure matched conditions; separate warm throughput and total elapsed time |
+| P07 | Autoscaling changes effective training batch or sampled output order | Freeze semantic knobs or create an explicitly authorized condition; do not tune silently |
+| P08 | Concurrency improvement is within observed noise | Keep smaller proven configuration; bounded remeasurement only within tuning budget |
+| P09 | Executor lacks feedback control | Use measured fixed settings; unattended execution still permitted with proven independent monitoring/stopping, otherwise attended and bounded; do not claim autoscaling |
+| P10 | Small shards increase scheduler and commit overhead | Pilot partition size including handoff/detection latency and retry cost; avoid universal tiny shards |
+| P11 | Fast rows finish; rare expensive strata remain | Preserve coverage and denominators; address stragglers without dropping rows or claiming early full throughput |
+| P12 | Tuning cost exceeds plausible remaining runtime saving | Stop tuning and use best valid measured configuration |
+| P13 | A cached artifact appears in multiple candidate trials | Do not count it as newly computed throughput; report end-to-end reuse separately |
+| P14 | Output queue drains but retained evidence fills disk | Stop admission based on durable capacity; never delete retained artifacts to resume |
+| P15 | A run is itself a latency benchmark | Treat concurrency/load/cache policy as frozen benchmark factors; no outcome-driven adaptation |
+| P16 | Resident worker runs another seed using stale RNG/state | Reset and bind execution state or isolate workers; residency is not permission to share mutable state |

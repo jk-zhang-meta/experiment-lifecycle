@@ -26,6 +26,8 @@ the contracts; filenames and tracking products are not scientific guarantees.
   [execution and monitoring](references/lifecycle.md).
 - Before model loading, GPU capacity probing, placement or GPU scheduling:
   [GPU execution](references/gpu-execution.md).
+- Before expensive scale-up or throughput/concurrency tuning:
+  [measured performance control](references/performance-control.md).
 - For current helper support and deployment boundaries:
   [compatibility and migration](README.md).
 - For rationale and source limits: [research basis](references/research-basis.md).
@@ -103,6 +105,12 @@ and a measured resource forecast with uncertainty. A canary prefix of the formal
 run may validate scale behavior while monitoring remains active throughout.
 Dev and formal runs share lineage, not an assumed scientific equivalence.
 
+Before expensive scale-up, distinguish correctness readiness from performance
+and concurrent-capacity readiness. Persist a measured stage map, authorized
+tuning ranges, aggregate limits, observation windows, backpressure thresholds,
+and a bounded tuning budget using the performance-control reference. Compare
+matched workload/cache conditions and include startup, validation and final drain.
+
 ## 3. Assign identity at the right level
 
 Keep study revision, condition, stage recipe, physical execution and artifact
@@ -136,6 +144,12 @@ permit. Reserve aggregate CPU/RAM/VRAM/I/O/storage and limit in-flight tasks and
 buffered bytes. Apply backpressure at a declared high-water mark; resume below
 the low-water mark. Protect validator/monitor capacity. Favor useful completion
 and draining bottlenecks rather than utilization at any cost.
+
+Use a measured fixed configuration or the executor's declared bounded feedback
+policy. Do not ask an LLM to decide every batch admission. Adjust the diagnosed
+bottleneck, retain tuning evidence, and stop exploration when its remaining
+cost outweighs plausible savings. No implicit semantic changes, speculative
+duplicates or starvation of costly required rows are allowed for speed.
 
 Never parallelize across a scientific barrier: global fitting, normalization,
 order-sensitive state or a final all-input comparison needs the specified closed
@@ -201,3 +215,7 @@ intermediates. Costly/research artifacts are not disposable caches. If storage
 is insufficient, backpressure or stop and resolve capacity; never silently
 delete, sample away, or keep only the best checkpoint. Verify retention and
 restore evidence, then report what is retained, where, and any remaining gaps.
+For expensive runs, include the performance report: first-result and full-run
+time, useful throughput, bottleneck/wait reasons, tuning decisions, reuse and
+failed/repeated compute cost. Mark estimates and unknowns; distinguish a policy
+specification from measured improvement and demonstrated executor enforcement.

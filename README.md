@@ -22,6 +22,11 @@ for sampling and readiness (including a MindCube example), and the
 backpressure, continuous monitoring, stopping, invalidation, reuse and retention.
 Read [GPU execution](references/gpu-execution.md) before model loading, capacity
 probes or GPU scheduling; its helper is `scripts/gpu-plan.mjs`.
+Read [performance control](references/performance-control.md) before expensive
+scale-up: separate correctness and capacity dev, measure the whole pipeline,
+declare bounded native feedback, and report bottlenecks and wasted compute.
+This is an execution contract; this repository does not implement an autoscaler
+or claim measured speedups without a project workload and backend validation.
 [Acceptance scenarios](references/evaluation.md) and [primary-source rationale](references/research-basis.md)
 are maintained in this same repository. No second Skill repository is required.
 
