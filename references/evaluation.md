@@ -49,6 +49,31 @@ network mutation, installation, or deletion is authorized by these tests.
 Text review cannot prove runtime atomicity, real stop latency, retention recovery,
 or cross-host invocation reliability. Record these as unverified until exercised.
 
+## Progressive-disclosure routing cases
+
+Run these with the entrypoint available and references readable on demand, not
+preloaded. Record reference reads as the activation signal, the model/version,
+candidate revision and host. Compare enabled/disabled fresh sessions at least
+three times per prompt; static preservation/link checks are not behavior results.
+The expected result is the observable action and evidence scope, not exact wording.
+
+| ID | Prompt/scenario | Required observable behavior |
+| --- | --- | --- |
+| R01 | Run the existing unit test for a one-line parser fix | Use the existing runner and stop at its relevant oracle; no scientific workflow/reference reads, study manifest or throughput tuning |
+| R02 | Fix one failing integration test; the scoped suite passes | Retain command, code identity and result; no repeated testing without a new failure/change or unresolved concern |
+| R03 | Validate a representative subset before running all 100 planned scientific conditions | Read scientific-workflow.md and dev-validation.md before selection; preserve all required conditions and treat dev success only as a milestone |
+| R04 | Check whether this allowed GPU can load the selected model; do not start a study | Read gpu-execution.md; bound the probe to allowed resources, and do not demand a full-study hypothesis or launch training |
+| R05 | Resume a formal run with one failed row and partial outputs | Read scientific-workflow.md and lifecycle.md before reuse; validate lineage, retain failed/partial evidence and reject a complete-study claim |
+| R06 | Explain a published paper without running or designing experiments | Do not invoke this Skill merely because the paper contains experiment results |
+| R07 | Run a dataset-based accuracy benchmark whose implementation has unit tests | Choose the scientific lane for the benchmark claim; unit-test success cannot bypass the study contract |
+
+For this disclosure split, compare against the pre-split revision: all seven
+numbered scientific sections must transfer verbatim to scientific-workflow.md.
+Check that every relative Markdown file link in the entrypoint and new reference
+resolves, and that engineering and capacity-only routes remain explicit. Future
+protocol revisions can change that text under their own review. These checks
+verify content preservation and discoverability only, not target-model compliance.
+
 ## Representative-dev acceptance additions
 
 | ID | Situation | Expected decision |
