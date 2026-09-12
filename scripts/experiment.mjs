@@ -416,14 +416,8 @@ function gitSnapshot(sourceRoot, sourceSpec) {
   const statusRaw = runGit(sourceRoot, ["status", "--porcelain=v1", "--untracked-files=normal"], "git status");
   const statusItems = statusRaw ? statusRaw.split(/\r?\n/u).filter(Boolean).slice(0, MAX_STATUS_ITEMS) : [];
   if (statusRaw && statusItems.length >= MAX_STATUS_ITEMS) fail("STATUS_CAP", "Git status exceeded the item cap; narrow the project or clean the tree.");
-  let patchDigest = null;
-  let patchPath = null;
   if (statusItems.length) {
-    if (!sourceSpec.dirtyPatch) fail("DIRTY_SOURCE", "Source tree is dirty; provide a complete source.dirtyPatch snapshot or commit the changes.");
-    patchPath = abs(sourceSpec.dirtyPatch, "source.dirtyPatch");
-    const patch = digestPath(patchPath, "source.dirtyPatch");
-    if (patch.kind !== "file") fail("PATCH_INVALID", "source.dirtyPatch must be a regular file.");
-    patchDigest = patch.sha256;
+    fail("DIRTY_SOURCE", "Source tree is dirty; commit all experiment source changes before initialization or verification. A supplied patch cannot prove a complete working-tree snapshot.");
   } else if (sourceSpec.dirtyPatch) {
     fail("PATCH_WITH_CLEAN_SOURCE", "source.dirtyPatch was supplied but the Git tree is clean.");
   }
@@ -445,7 +439,7 @@ function gitSnapshot(sourceRoot, sourceSpec) {
     status: statusItems.length ? "dirty" : "clean",
     statusDigest: digestBytes(statusRaw),
     statusItems,
-    dirtyPatch: patchPath ? { path: patchPath, digest: patchDigest } : null,
+    dirtyPatch: null,
     scope: scoped,
   };
 }
@@ -903,8 +897,9 @@ function initCommand(options) {
   if (existsSync(attemptPath)) {
     attempt = loadRecord(attemptPath, "ATTEMPT.json");
     if (normalizeDigest(attempt.semanticFingerprint, "ATTEMPT semantic fingerprint") !== semanticFingerprint) fail("ATTEMPT_CONFLICT", "Existing attempt directory has a different semantic fingerprint.");
-    if ((attempt.parentSemanticAttemptId || null) !== (attemptRecord.parentSemanticAttemptId || null)
-        || canonicalJson(attempt.changeSet) !== canonicalJson(attemptRecord.changeSet)) {
+    if ((!options.retryOf || options.compareTo)
+        && ((attempt.parentSemanticAttemptId || null) !== (attemptRecord.parentSemanticAttemptId || null)
+        || canonicalJson(attempt.changeSet) !== canonicalJson(attemptRecord.changeSet))) {
       fail("ATTEMPT_CONFLICT", "Existing attempt metadata has a different comparison parent or change set.");
     }
   } else attempt = writeImmutableRecord(attemptPath, attemptRecord);
@@ -1202,6 +1197,7 @@ function verifyShardsCommand(options) {
     schemaVersion: SCHEMA_VERSION, kind: "pac-experiment-shard-closure", projectId: run.projectId,
     experimentId: run.experimentId, semanticAttemptId: run.semanticAttemptId, executionId: run.executionId,
     runManifestDigest: run.runManifestDigest, shardPlanDigest: plan.recordDigest,
+    shardPlan: { path: relativeExecutionPath(executionRoot, planPath), digest: plan.recordDigest },
     expectedItems: plan.expectedItems, completedItems: receipts.reduce((sum, item) => sum + item.itemCount, 0),
     shards: receipts, status: "complete", completedAt: new Date().toISOString(),
   });
@@ -1216,12 +1212,45 @@ function shardClosure(run, reportPath, executionRoot) {
   if (!within(executionRoot, pathValue)) fail("SHARD_CLOSURE_SCOPE", "Shard report must be inside the execution root.");
   const report = loadRecord(pathValue, "shard report");
   if (report.runManifestDigest !== run.runManifestDigest || report.executionId !== run.executionId || report.status !== "complete" || report.completedItems !== partitioning.expectedItems) fail("SHARD_INCOMPLETE", "Shard report is incomplete or names a different execution.");
-  for (const shard of report.shards || []) {
+  if (!report.shardPlan?.path) fail("SHARD_PLAN_REQUIRED", "Regenerate the shard closure with an explicit plan path before sealing.");
+  const dependencies = [];
+  const dependency = (relativePath, role, expectedDigest, record = false) => {
+    const rel = safeRelative(relativePath, role);
+    const target = resolve(executionRoot, rel);
+    const value = record ? loadRecord(target, role) : null;
+    const actual = digestPath(target, role);
+    if ((record ? value.recordDigest : actual.sha256) !== normalizeDigest(expectedDigest, role)) {
+      fail("SHARD_EVIDENCE_STALE", `Shard evidence changed: ${rel}`);
+    }
+    dependencies.push({ path: rel, role, ...actual });
+    return value;
+  };
+  const plan = dependency(report.shardPlan.path, "shard-plan", report.shardPlan.digest, true);
+  if (plan.recordDigest !== report.shardPlanDigest || plan.runManifestDigest !== run.runManifestDigest
+      || plan.executionId !== run.executionId || plan.expectedItems !== partitioning.expectedItems
+      || !Array.isArray(report.shards) || report.shards.length !== plan.shards.length) {
+    fail("SHARD_INCOMPLETE", "Shard closure does not match its plan.");
+  }
+  const seen = new Set();
+  for (const shard of report.shards) {
+    const assigned = plan.shards.find((entry) => entry.shardId === shard.shardId);
+    if (!assigned || seen.has(shard.shardId)) fail("SHARD_INCOMPLETE", "Shard closure has unknown or duplicate shards.");
+    seen.add(shard.shardId);
+    const receipt = dependency(shard.receipt.path, "shard-receipt", shard.receipt.digest, true);
+    if (receipt.runManifestDigest !== run.runManifestDigest || receipt.executionId !== run.executionId
+        || receipt.shardPlanDigest !== plan.recordDigest || receipt.shardId !== shard.shardId
+        || !["succeeded", "success", "completed"].includes(String(receipt.terminalState || "").toLowerCase())
+        || receipt.output.path !== shard.output.path || receipt.output.sha256 !== shard.output.sha256
+        || receipt.itemCount !== assigned.expectedItems) fail("SHARD_INCOMPLETE", "Shard receipt does not match the closure and plan.");
+    dependency(receipt.itemManifest.path, "shard-inputs", receipt.itemManifest.sha256);
+    const itemIds = readItemIds(resolve(executionRoot, safeRelative(receipt.itemManifest.path, "shard inputs")), "shard inputs");
+    if (canonicalJson(itemIds) !== canonicalJson(assigned.itemIds)) fail("SHARD_ASSIGNMENT_MISMATCH", "Closed shard inputs differ from the plan.");
     const outputPath = resolve(executionRoot, safeRelative(shard.output.path, "closed shard output"));
     const current = digestPath(outputPath, `closed output ${shard.shardId}`);
     if (current.sha256 !== normalizeDigest(shard.output.sha256, "closed shard output digest")) fail("SHARD_OUTPUT_STALE", `Shard output changed after closure: ${shard.shardId}`);
+    dependency(shard.output.path, "shard-output", shard.output.sha256);
   }
-  return { path: pathValue, digest: digestPath(pathValue, "shard report") };
+  return { path: pathValue, digest: digestPath(pathValue, "shard report"), dependencies };
 }
 
 function matrixClosure(run, reportPath, executionRoot) {
@@ -1248,6 +1277,7 @@ function matrixClosure(run, reportPath, executionRoot) {
     const status = String(row.status || "");
     if (!["completed", "failed", "blocked", "excluded-with-reason"].includes(status)) fail("MATRIX_STATUS_INVALID", `Invalid terminal status for ${row.conditionId}.`);
     if (status === "excluded-with-reason" && !(typeof row.reason === "string" && row.reason.trim())) fail("MATRIX_STATUS_INVALID", `Excluded condition ${row.conditionId} requires a reason.`);
+    if (status !== "completed") fail("MATRIX_INCOMPLETE", "VerifiedResult requires every frozen matrix condition to be completed. Failed, blocked, and post-hoc excluded rows remain incomplete.");
     seen.add(row.conditionId);
   }
   return { path: pathValue, digest: digestPath(pathValue, "matrix report") };
@@ -1286,6 +1316,11 @@ function sealCommand(options) {
   addUniqueEntry(entries, { path: relativeExecutionPath(executionRoot, oraclePath, "oracle report"), role: "oracle", kind: oracleDigest.kind, bytes: oracleDigest.bytes, files: oracleDigest.files, sha256: oracleDigest.sha256 }, seen);
   if (matrixReport) addUniqueEntry(entries, { path: relativeExecutionPath(executionRoot, matrixReport.path, "matrix report"), role: "matrix-closure", kind: matrixReport.digest.kind, bytes: matrixReport.digest.bytes, files: matrixReport.digest.files, sha256: matrixReport.digest.sha256 }, seen);
   if (shardReport) addUniqueEntry(entries, { path: relativeExecutionPath(executionRoot, shardReport.path, "shard report"), role: "shard-closure", kind: shardReport.digest.kind, bytes: shardReport.digest.bytes, files: shardReport.digest.files, sha256: shardReport.digest.sha256 }, seen);
+  for (const entry of shardReport?.dependencies || []) {
+    const existing = entries.find((item) => item.path === entry.path);
+    if (existing && existing.sha256 !== entry.sha256) fail("SHARD_EVIDENCE_STALE", "Shard dependency changed while sealing.");
+    if (!existing) addUniqueEntry(entries, entry, seen);
+  }
   for (const receipt of receiptEntries) {
     addUniqueEntry(entries, { path: receipt.path, role: `receipt:${receipt.role}`, kind: "file", bytes: receipt.bytes, files: 1, sha256: receipt.digest, identity: receipt.identity }, seen);
   }
@@ -1470,6 +1505,7 @@ function recordAnalysisCommand(options) {
   if (!within(executionRoot, out) || !within(executionRoot, indexPath)) fail("ANALYSIS_SCOPE", "Analysis record and input index must be inside the execution root.");
   const index = loadRecord(indexPath, "output-index.json");
   if (index.runManifestDigest !== run.runManifestDigest || index.executionId !== run.executionId) fail("ANALYSIS_MISMATCH", "Analysis input index names a different execution.");
+  verifyIndex(runPath, run, index);
   const codeDigest = normalizeDigest(options.codeDigest, "analysis code digest");
   const configDigest = normalizeDigest(options.configDigest, "analysis config digest");
   const record = writeImmutableRecord(out, {

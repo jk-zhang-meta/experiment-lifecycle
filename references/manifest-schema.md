@@ -173,11 +173,25 @@ same set of scoped files does not create a spurious attempt. The full
 `afterDigest`, `changed`, and `classification`. A classification is never
 silently guessed from a textual diff.
 
+The bundled helper requires a clean, committed Git source snapshot for init,
+retry, and source verification. `source.dirtyPatch` must remain null: an
+arbitrary patch file cannot prove that tracked, staged, untracked, and submodule
+content was completely captured. Commit source changes before starting a run.
+
 When `matrix` is present, each axis is sorted canonically and the Cartesian
 product is recorded in immutable `MATRIX.json`. Each row has a stable
 `conditionId`; the matrix digest is part of semantic identity. Sealing requires
-an execution-local closure report naming the same matrix and one terminal status
-for every condition, so expected rows cannot silently disappear.
+an execution-local closure report naming the same matrix and `completed`
+for every condition. Failed and blocked rows remain valuable evidence but do
+not constitute a VerifiedResult. The helper has no frozen exclusion-policy
+field; a post-hoc `excluded-with-reason` row also prevents successful sealing.
+Revise and freeze the scientific design as a new attempt when exclusions are
+needed, rather than relabeling an incomplete matrix.
+
+Shard closure records include an execution-relative plan path. Sealing indexes
+the plan, worker receipts, assigned item manifests, and shard outputs as well
+as the closure itself. Older closures without a plan path must be regenerated
+before sealing; verification does not guess a conventional filename.
 
 `environment.semantic: false` is an explicit declaration that the listed
 environment details are execution evidence rather than a scientific factor;

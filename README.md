@@ -33,7 +33,11 @@ are maintained in this same repository. No second Skill repository is required.
 ## Protocol versus bundled helper
 
 The existing [manifest schema](references/manifest-schema.md) and
-`scripts/experiment.mjs` retain their v1 interfaces and evidence compatibility.
+`scripts/experiment.mjs` retain their v1 record format. Successful sealing now
+requires every frozen matrix row to be completed and includes transitive shard
+evidence. New shard closures carry an explicit plan path; regenerate old
+closures before sealing. The helper accepts only clean, committed source
+snapshots and refuses `dirtyPatch` as unproven source identity.
 The integrated protocol can use equivalent project-native records; it does not
 force duplicate JSON records, a tracking service or another scheduler.
 

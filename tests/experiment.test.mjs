@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import {
-  cpSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync,
+  cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const script = join(fileURLToPath(new URL("..", import.meta.url)), "scripts", "experiment.mjs");
@@ -172,6 +172,15 @@ test("matrix sealing requires and indexes a complete closure report", () => {
     const rejected = cli(["seal", "--run", prepared.runPath, "--oracle-report", prepared.oraclePath, "--matrix-report", incomplete], 2);
     assert.equal(rejected.error.code, "MATRIX_INCOMPLETE");
     const closure = join(prepared.dir, "matrix.json");
+    for (const status of ["failed", "blocked", "excluded-with-reason"]) {
+      writeFileSync(closure, JSON.stringify({
+        runManifestDigest: prepared.run.runManifestDigest, executionId: prepared.run.executionId,
+        matrixDigest: matrix.matrixDigest,
+        rows: matrix.rows.map((row) => ({ conditionId: row.conditionId, status, reason: "post-hoc" })),
+      }));
+      assert.equal(cli(["seal", "--run", prepared.runPath, "--oracle-report", prepared.oraclePath, "--matrix-report", closure], 2).error.code, "MATRIX_INCOMPLETE");
+      assert.equal(existsSync(join(prepared.dir, "COMPLETE.json")), false);
+    }
     writeFileSync(closure, JSON.stringify({
       schemaVersion: 1, runManifestDigest: prepared.run.runManifestDigest, executionId: prepared.run.executionId,
       matrixDigest: matrix.matrixDigest, rows: matrix.rows.map((row) => ({ conditionId: row.conditionId, status: "completed" })),
@@ -197,7 +206,7 @@ test("shard plan and closure reject shared outputs and duplicated input ownershi
     writeFileSync(fx.specPath, `${JSON.stringify(fx.spec, null, 2)}\n`);
     const init = cli(["init", "--spec", fx.specPath, "--runtime-root", fx.runtime]);
     const run = JSON.parse(readFileSync(init.run, "utf8")); const dir = runDir(init.run);
-    const planPath = join(dir, "SHARD-PLAN.json"); const plan = cli(["plan-shards", "--run", init.run, "--items", itemsPath, "--out", planPath]);
+    const planPath = join(dir, "custom-plan.json"); const plan = cli(["plan-shards", "--run", init.run, "--items", itemsPath, "--out", planPath]);
     assert.equal(plan.shardCount, 2);
     const receiptPaths = [];
     for (const shard of JSON.parse(readFileSync(planPath, "utf8")).shards) {
@@ -317,6 +326,11 @@ test("same semantic retry stays in one attempt; code/config change is a new atte
     assert.equal(comparison.sameSemantic, false);
     assert.ok(comparison.changedDimensions.includes("source"));
     assert.ok(comparison.changedDimensions.includes("configs"));
+    const comparedRetry = cli(["init", "--spec", fx.specPath, "--runtime-root", fx.runtime, "--retry-of", changed.run]);
+    assert.equal(comparedRetry.semanticAttemptId, changed.semanticAttemptId);
+    assert.notEqual(comparedRetry.executionId, changed.executionId);
+    const retriedRun = JSON.parse(readFileSync(comparedRetry.run, "utf8"));
+    assert.equal(retriedRun.parentExecutionId, changed.executionId);
   } finally { rmSync(fx.root, { recursive: true, force: true }); }
 });
 
@@ -333,5 +347,91 @@ test("dirty source and source-scope mutation cannot be silently attributed", () 
     git(fx.source, ["commit", "--quiet", "-m", "change source"]);
     const changed = cli(["verify-source", "--run", clean.run], 2);
     assert.equal(changed.error.code, "SOURCE_CHANGED");
+  } finally { rmSync(fx.root, { recursive: true, force: true }); }
+});
+
+test("dirty snapshots cannot bypass source identity with a supplied patch", () => {
+  const fx = fixture();
+  try {
+    const clean = cli(["init", "--spec", fx.specPath, "--runtime-root", fx.runtime]);
+    const helper = join(fx.source, "src", "helper.py");
+    writeFileSync(helper, "value = 1\n");
+    git(fx.source, ["add", "src/helper.py"]);
+    git(fx.source, ["commit", "--quiet", "-m", "helper outside explicit scope"]);
+    writeFileSync(helper, "value = 2\n");
+    const patchPath = join(fx.root, "source.patch");
+    writeFileSync(patchPath, execFileSync("git", ["diff", "--binary", "HEAD"], { cwd: fx.source }));
+    fx.spec.source.dirtyPatch = patchPath;
+    writeFileSync(fx.specPath, JSON.stringify(fx.spec));
+    assert.equal(cli(["init", "--spec", fx.specPath, "--runtime-root", fx.runtime], 2).error.code, "DIRTY_SOURCE");
+    git(fx.source, ["add", "src/helper.py"]);
+    writeFileSync(helper, "value = 999\n");
+    assert.equal(cli(["init", "--spec", fx.specPath, "--runtime-root", fx.runtime, "--retry-of", clean.run], 2).error.code, "DIRTY_SOURCE");
+    assert.equal(cli(["verify-source", "--run", clean.run], 2).error.code, "DIRTY_SOURCE");
+  } finally { rmSync(fx.root, { recursive: true, force: true }); }
+});
+
+test("analysis refuses an index whose sealed inputs have changed", () => {
+  const fx = fixture();
+  try {
+    const prepared = prepareRun(fx);
+    cli(["seal", "--run", prepared.runPath, "--oracle-report", prepared.oraclePath]);
+    writeFileSync(join(prepared.dir, "outputs", "metrics.json"), '{"metric":999}\n');
+    const out = join(prepared.dir, "analysis-record.json");
+    const result = cli(["record-analysis", "--run", prepared.runPath, "--out", out,
+      "--output-index", join(prepared.dir, "output-index.json"), "--analysis-id", "metrics",
+      "--method", "mean", "--code-digest", sha256("code"), "--config-digest", sha256("config")], 2);
+    assert.equal(result.error.code, "OUTPUT_STALE");
+    assert.equal(existsSync(out), false);
+  } finally { rmSync(fx.root, { recursive: true, force: true }); }
+});
+
+test("sealed shard evidence is transitive and portable", () => {
+  const fx = fixture();
+  try {
+    const items = ["a", "b"];
+    const payload = JSON.stringify(items) + "\n";
+    const itemsPath = join(fx.root, "items.json");
+    writeFileSync(itemsPath, payload);
+    fx.spec.compute.partitioning = {
+      mode: "sharded", itemManifestDigest: sha256(payload), expectedItems: items.length,
+      shardCount: 2, assignment: "balanced-contiguous", resultItemIdField: "itemId",
+    };
+    writeFileSync(fx.specPath, JSON.stringify(fx.spec));
+    const prepared = prepareRun(fx);
+    const planPath = join(prepared.dir, "custom-plan.json");
+    cli(["plan-shards", "--run", prepared.runPath, "--items", itemsPath, "--out", planPath]);
+    const receipts = [];
+    const dependencies = [planPath];
+    for (const shard of JSON.parse(readFileSync(planPath, "utf8")).shards) {
+      const dir = join(prepared.dir, shard.outputPrefix, "worker-1");
+      mkdirSync(dir, { recursive: true });
+      const input = join(dir, "items.json");
+      const output = join(dir, "results.jsonl");
+      const receipt = join(dir, "receipt.json");
+      writeFileSync(input, JSON.stringify(shard.itemIds) + "\n");
+      writeFileSync(output, shard.itemIds.map((itemId) => JSON.stringify({ itemId })).join("\n") + "\n");
+      cli(["record-shard", "--run", prepared.runPath, "--plan", planPath, "--out", receipt,
+        "--shard-id", shard.shardId, "--worker-attempt-id", "worker-1", "--endpoint", "cpu",
+        "--item-manifest", input, "--output", output, "--rows", String(shard.expectedItems)]);
+      receipts.push(receipt);
+      dependencies.push(input, receipt, output);
+    }
+    const report = join(prepared.dir, "closure.json");
+    cli(["verify-shards", "--run", prepared.runPath, "--plan", planPath, "--out", report,
+      ...receipts.flatMap((file) => ["--shard-receipt", file])]);
+    cli(["seal", "--run", prepared.runPath, "--oracle-report", prepared.oraclePath, "--shard-report", report]);
+    assert.equal(cli(["verify-run", "--run", prepared.runPath]).state, "VerifiedResult");
+    for (const file of dependencies) {
+      const original = readFileSync(file);
+      writeFileSync(file, "corrupt\n");
+      assert.equal(cli(["verify-run", "--run", prepared.runPath], 2).error.code, "OUTPUT_STALE");
+      rmSync(file);
+      assert.equal(cli(["verify-run", "--run", prepared.runPath], 2).ok, false);
+      writeFileSync(file, original);
+    }
+    const copy = join(fx.root, "portable");
+    cpSync(fx.runtime, copy, { recursive: true });
+    assert.equal(cli(["verify-run", "--run", join(copy, relative(fx.runtime, prepared.runPath))]).state, "VerifiedResult");
   } finally { rmSync(fx.root, { recursive: true, force: true }); }
 });
