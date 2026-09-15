@@ -1,4 +1,4 @@
 interface:
   display_name: "Experiment Lifecycle"
-  short_description: "Unify tests, representative dev, and full research experiments"
-  default_prompt: "Use $experiment-lifecycle to choose the right test or experiment scope, validate representative dev coverage, and preserve verified evidence end to end."
+  short_description: "Manage research milestones and experiments through GitHub"
+  default_prompt: "Use $experiment-lifecycle to manage this repository's research goal, milestones, experiments, problems and evidence through GitHub from planning to verified closure."

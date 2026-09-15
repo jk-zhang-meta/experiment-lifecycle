@@ -10,6 +10,9 @@
 
 ## 1. Evidence entities
 
+For server directory roles, location mappings and GitHub reconciliation, use
+[storage alignment](storage-layout.md); this document owns artifact semantics.
+
 Use project-native records when they encode these relationships. These are
 logical fields, not a mandatory database, naming scheme or new JSON ABI.
 
@@ -60,6 +63,12 @@ Consumer eligibility requires all of:
 3. Parents and transitive dependencies have no current revocation.
 4. The consumer records the exact input versions and a retention pin/hold covers
    their use; aggregate resource and queue admission succeeds.
+
+Analysis enumerates only exact artifact versions from the accepted collection;
+never glob staging/retry directories or aggregate every file found under a run
+root. Selection follows the declared fence scope: valid independent partitions
+may come from different attempts, while a coupled checkpoint must remain one
+consistent generation. Preserve excluded retry bytes without counting them.
 
 Recheck validity before accepting the consumer output. Native transactions,
 conditional writes or fencing tokens must close the race between this check

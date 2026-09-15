@@ -21,6 +21,13 @@ contract. A first verified dev result is a milestone, never a substitute for
 the required full experiment. Retain intermediate, failed, superseded, and final
 research evidence; reduce duplicate bookkeeping, not evidence coverage.
 
+Bind each study revision to its GitHub goal, milestone acceptance record and
+experiment Issue under [research management](research-management.md) and
+[GitHub workflow](github-workflow.md). A milestone may need many studies and
+trial batches; do not equate one successful run with milestone acceptance.
+Use the current decision and unresolved evidence gaps to select the next bounded
+batch. Reconcile defects, changed protocols and earlier decisions before resume.
+
 GPU planning is part of this Skill, not another lifecycle. Bind the explicit
 device/model allowlists, measure headroom and useful throughput, and admit only
 ready work within aggregate budgets. Capacity probes cannot silently change
