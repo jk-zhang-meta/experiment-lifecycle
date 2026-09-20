@@ -11,7 +11,10 @@
 ## 1. Evidence entities
 
 For server directory roles, location mappings and GitHub reconciliation, use
-[storage alignment](storage-layout.md); this document owns artifact semantics.
+[storage alignment](storage-layout.md). For item-granular DAG expansion and
+framework-owned I/O, use [artifact concurrency](artifact-concurrency.md) and the
+selected [ClearML integration](clearml-integration.md). This document owns
+artifact semantics.
 
 Use project-native records when they encode these relationships. These are
 logical fields, not a mandatory database, naming scheme or new JSON ABI.
@@ -20,7 +23,7 @@ logical fields, not a mandatory database, naming scheme or new JSON ABI.
 | --- | --- |
 | Study revision | Scientific contract, expected membership, amendments and parent revision |
 | Condition | Scientific factor values, input/split identity and independent replicate/seed |
-| Stage recipe | Code/dependency closure, effective parameters, input/output contracts, semantic environment and randomness |
+| Operation recipe | Code/dependency closure, effective parameters, input/output contracts, semantic environment and randomness |
 | Execution | Unique physical attempt; intended recipe, exact input versions, provider job reference, allocation, retry/resume parent and producer generation |
 | Artifact version | Producer execution, content digest/size, schema, logical role, partition/item coverage, exact consumed parents, validator and commit receipt |
 | Collection version | Immutable list or Merkle manifest of exact artifact versions and membership; open/closed coverage assertion |
@@ -34,13 +37,52 @@ dependencies; if dependency closure is uncertain, widen conservatively or disabl
 reuse. Inputs supplied by mutable APIs need actual response/version evidence and
 the declared repeatability limitation. Store secrets outside provenance records.
 
+An artifact record must also distinguish its stable logical output key from its
+accepted immutable version and physical producer. The logical key may contain
+dataset revision, item/frame/entity ID, condition, operation, iteration and named
+output port. The version binds recipe version/digest and exact immutable
+input artifact references to payload identity and validation. Execution and
+node-attempt IDs identify a physical producer/retry only; they are not cache keys
+or scientific output identities. A stable manifest locator maps the logical key
+to an accepted version and exact parents. It must not be a mutable path, `latest`
+view or directory glob.
+
+There is one computation DAG, not a required stage hierarchy. Each node accepts
+its declared inputs and returns declared outputs; immutable artifact versions are
+the graph edges. Existing native `stage` fields or group labels can remain as
+optional metadata; map them to nodes without requiring a stage hierarchy, a second
+artifact ledger or a stage-wide barrier unless an actual coupled operation needs
+one.
+
+For a data-dependent expansion, persist a decision and membership receipt that
+binds the expansion recipe, exact discovery input versions, generated keys,
+membership state and producing execution. Subsequent scheduling replays that
+receipt; it does not rerun costly or stochastic discovery merely to reconstruct
+the graph. Before the receipt exists, represent only the declared template and
+known members, not a false fully static DAG.
+
 ## 2. Commit and consumption
 
 Artifact physical states are staging, committed or incomplete. Scientific use
 states are unvalidated, valid or revoked. An artifact can remain durably committed
 while revoked; preservation and scientific acceptance are different decisions.
 
-The producer writes exclusively under its execution/generation staging prefix.
+ClearML Task completion, an enqueued background artifact upload and Ray ObjectRef
+availability do not establish this commit. ClearML ordinary artifact names may
+be overwritten; use immutable physical attempt identities and accepted manifests.
+Wait for upload success, verify the declared retained destination and publish the
+commit before exposing the reference. Tracker updates and object writes are not
+one cross-service transaction: use the native commit as the authority and repair
+missing tracker associations idempotently without repeating scientific effects.
+Native task cache matches must still pass complete recipe/parent validation.
+
+The producer writes exclusively under its execution/generation and node-attempt
+staging prefix. Nodes are computation only: they receive framework-resolved
+named inputs and return named outputs. The framework/store layer resolves exact
+refs, loads inputs, validates output, writes bytes, commits manifests and routes
+successors; node code does not discover predecessor folders, glob raw outputs or
+commit an unrelated consumer's state.
+
 After completing a logical partition or checkpoint it closes the files, verifies
 bytes/schema/coverage/domain checks, and commits an immutable manifest binding
 all members. A complete committed partition is independent of the still-running
@@ -69,6 +111,9 @@ never glob staging/retry directories or aggregate every file found under a run
 root. Selection follows the declared fence scope: valid independent partitions
 may come from different attempts, while a coupled checkpoint must remain one
 consistent generation. Preserve excluded retry bytes without counting them.
+Shared outputs are reused only through their exact accepted manifest refs and
+retention pins; no retry may treat another attempt's staging path as input. Final
+analysis/closure uses an explicit collection fan-in with declared membership.
 
 Recheck validity before accepting the consumer output. Native transactions,
 conditional writes or fencing tokens must close the race between this check
@@ -97,7 +142,7 @@ only as rebuildable pointers to immutable evidence, not as provenance authority.
 
 ## 3. Reuse and invalidation
 
-A stage reuse key covers actual parent content identities, stage code and
+A computation reuse key covers actual parent content identities, operation code and
 transitive dependencies, effective parameters, data/model revisions, preprocessing,
 output schema, semantic environment/hardware, and stochastic/replicate semantics.
 Full-study identity remains attached as provenance but is not an indiscriminate
@@ -219,10 +264,24 @@ only when implementation is in scope and its behavior is verified.
 
 ## Parallelism that respects science and scarce resources
 
-Use the smallest useful independently committable unit: a partition, a batch of
-items, a model checkpoint or a condition. Too-small units waste setup/I/O;
+Use the mandatory per-artifact handoff and adapter contract in
+[artifact concurrency](artifact-concurrency.md). Trace the real code into one
+versioned computation DAG: each node accepts named inputs and returns named
+outputs; each edge binds an exact committed artifact version to an input port.
+An artifact-only drawing is an optional projection, not a second authoritative
+graph. A validated durable output commit releases its consumers immediately.
+Do not delay release until other items, a shard, a dataset
+or an unrelated operation completes. Dispatch still requires resource, quota, storage and
+monitoring admission; dependency readiness is not an allocation.
+
+Use the smallest useful independently committable unit: a frame/entity result,
+tool receipt, iteration decision, partition, or genuinely coupled checkpoint.
+Too-small execution tasks can waste setup/I/O;
 too-large units delay error detection, downstream release and recovery. Measure
 the tradeoff on dev, including checkpoint/write/validation overhead and tail risk.
+Computation batching must not become an artificial whole-dataset commit barrier.
+Where several independent items share a write container, expose separately
+committed readable item records as soon as each bounded write completes.
 
 For each edge declare one of:
 
@@ -236,7 +295,7 @@ For each edge declare one of:
 Partition order may be arbitrary only when scientific semantics permit it.
 Global fitted transformations must be fixed before partitions using them;
 cross-validation folds retain their own fitting boundaries. Distributed training
-collectives are not independent partition stages merely because multiple GPUs
+collectives are not independent partitions merely because multiple GPUs
 are present. Separate train/evaluation allocations if they cannot safely coexist.
 
 Illustrative equal-duration timeline (not a performance estimate):
@@ -249,7 +308,7 @@ Illustrative equal-duration timeline (not a performance estimate):
 | 4 | P4 | P3 | P2 |
 
 Each handoff in this example requires a validated commit; final aggregation
-still waits for full required coverage. Real stage lengths and shared CPU/I/O
+still waits for full required coverage. Real operation lengths and shared CPU/I/O
 contention determine whether overlap saves time.
 
 Budget aggregate CPU/RAM/VRAM, accelerator allocation, task count, pending queue,
@@ -267,7 +326,10 @@ Reserve worst-case remaining writes of already admitted work, prospective work,
 control/validator capacity and shutdown evidence before admitting another task.
 Prefer bottleneck/critical-path work and avoid starving checks to make GPU
 utilization look good. Allow concurrency to change only within the authorized
-budget and without silently altering scientific semantics.
+budget and without silently altering scientific semantics. Storage pressure is
+backpressure: stop new admission, preserve logs and failed/incomplete evidence,
+and resume only after verified capacity or authorized migration. It never permits
+deleting retained artifacts to make space.
 
 ## Continuous observation
 

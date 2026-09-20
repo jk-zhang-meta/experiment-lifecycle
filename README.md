@@ -26,11 +26,19 @@ GPU model loading, capacity probes and admission are also integrated here;
   approvals. Configure native enforcement only within repository authority.
 - Ordinary unit/integration/end-to-end checks use the project's test runner and
   an engineering oracle; no scientific manifest is required merely to run a test.
-- Dataset-based dev uses the exact population and taxonomy, stratified proportions,
-  mandatory category/group/interaction coverage, leakage checks and a reproducible
-  membership manifest. A dev pass authorizes only its declared next step.
+- Dataset-based dev distinguishes risk-based engineering coverage from statistical
+  screening and population estimation. Use exact dataset identity, relevant
+  strata/groups/interactions and reproducible membership; omit an underpowered
+  effect screen without waiving engineering readiness or formal coverage.
 - Formal experiments preserve the full planned coverage and all research evidence,
   including failures, intermediates, retries, analyses and final results.
+
+For research-project initialization and code/config changes, use
+[project readiness](references/project-readiness.md): bind configuration,
+computation, artifacts and tracking early, then assess change impact. Reuse the
+project's architecture/recipes/records; setup does not authorize a service or
+experiment launch. Separate specified, bound, statically checked and runtime-
+verified capabilities, including canonical versus installed Skill versions.
 
 Read [SKILL.md](SKILL.md) for the entrypoint, [dev validation](references/dev-validation.md)
 for sampling and readiness (including a MindCube example), and the
@@ -41,12 +49,53 @@ probes or GPU scheduling; its helper is `scripts/gpu-plan.mjs`.
 Read [performance control](references/performance-control.md) before expensive
 scale-up: separate correctness and capacity dev, measure the whole pipeline,
 declare bounded native feedback, and report bottlenecks and wasted compute.
-This is an execution contract; this repository does not implement an autoscaler
-or claim measured speedups without a project workload and backend validation.
+The [executable concurrency reference](references/artifact-concurrency.md) adds
+fine-grained artifact handoff, explicit dynamic expansion, resource admission,
+shared API quotas/retries and bounded top-down concurrency probes. The contract
+binds existing experiment staging, outputs, logs and retained references; it
+does not create a parallel results tree. [Framework selection](references/framework-selection.md)
+sets ClearML as the first-choice management platform for new integrations, with
+native Pipeline, Ray Core or file-workflow execution selected by project needs.
+Compliant existing platforms remain supported; there is no mandatory migration.
+It does not implement a distributed autoscaler or claim measured speedups.
 [Acceptance scenarios](references/evaluation.md) and [primary-source rationale](references/research-basis.md)
 are maintained in this same repository. No second Skill repository is required.
 
 ## Protocol versus bundled helper
+
+The [ClearML integration](references/clearml-integration.md) defines study/trial/
+attempt mappings, native Pipeline and Ray execution ownership, committed-output
+handoff and explicit tracking gaps. Hydra configuration composition and Optuna
+search are optional integrations, not competing launchers. Use an existing
+durable filesystem/S3-compatible store; MinIO is not a required dependency.
+ClearML records do not replace GitHub research decisions or scientific closure.
+
+`scripts/retained_node.py` is the shared computation-only load/fence/validate/commit
+seam used by the illustrative ClearML/Ray bindings. The store
+implementation remains project-owned. It provides no scheduler, tracking service,
+distributed quota system or automatic recovery across service failures.
+
+The shared helper extraction and ClearML/Ray wiring are **not runtime-validated**;
+only static checks/review are in scope for this revision. No ready-to-run generic
+ClearML-to-Ray per-node tracking bridge is claimed. Monolithic steps and hidden
+file/state dependencies need scoped project refactoring. Earlier Dagster/Dask
+project subgraph pilots are retained historical evidence, not validation of
+the shared helper or current bindings. Static review does
+not establish production durability, restoration or throughput.
+
+The Python reference in `scripts/artifact_dag.py`, `scripts/api_governor.py` and
+`scripts/concurrency_probe.py` is separate from the legacy v1 recording helper.
+It runs attended single-host cooperative async work on trusted local POSIX
+storage. It commits each validated item before releasing successors, persists
+identity-bound manifests and can revalidate/reuse them after restart. It does
+not implement independent monitoring, hard GPU/process cancellation, distributed
+quota enforcement, live revocation or full scientific closure. Existing project
+executors remain authoritative; do not layer a second scheduler over them.
+
+`scripts/pipeline_demo.py --output <local-runtime>/demo` runs an offline synthetic
+example and emits an editable artifact DAG, retained intermediates and events.
+No real API/GPU work or third-party installation is required. See the
+[reference contract](references/artifact-concurrency.md) for integration and limits.
 
 The existing [manifest schema](references/manifest-schema.md) and
 `scripts/experiment.mjs` retain their v1 record format. Successful sealing now
@@ -94,6 +143,12 @@ a detached job. Backend guarantees must be tested before unattended execution.
 
 Run `node --test tests/*.test.mjs` for the bundled helper regression
 suite, validate the Skill frontmatter/links, and exercise the behavioral cases.
+For the Python reference, run from a non-synchronized local runtime directory:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=<skill>/scripts python3 -m unittest discover -s <skill>/tests -p 'test_*.py'
+```
+
 These tests do not prove live GPU throughput, cancellation latency or storage
 atomicity. Before enabling a backend, run its fault-injection and restore checks.
 Before PAC activation, validate the exact Profile dependency update and host
@@ -167,8 +222,10 @@ node scripts/reuse.mjs verify-reuse inputs/data artifact.json /run/exp
 The design combines GitHub Issues/Milestones/PRs for collaborative research,
 content-addressed reuse and experiment versioning inspired by DVC, run grouping
 and input lineage inspired by MLflow and W&B, and explicit resource/artifact
-separation. GitHub is required; no additional tracking server, mutable `latest`
-identity or hidden telemetry upload is required. Product capabilities motivate
+separation. GitHub is required for research; ClearML is the selected first-choice
+management platform for new integrations, not a service required for every test
+or an instruction to replace compliant existing platforms. Mutable `latest`
+identities and hidden telemetry uploads are not permitted. Product capabilities motivate
 the design but do not prove scientific validity or measured productivity gains.
 
 ## Safety invariant

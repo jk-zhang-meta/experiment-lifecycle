@@ -5,6 +5,7 @@
 - [Scope and ownership](#scope-and-ownership)
 - [Performance contract](#performance-contract)
 - [Two dev gates](#two-dev-gates)
+- [Executable item and API concurrency](#executable-item-and-api-concurrency)
 - [Find and test the bottleneck](#find-and-test-the-bottleneck)
 - [Bounded feedback policy](#bounded-feedback-policy)
 - [Retention and completion](#retention-and-completion)
@@ -30,6 +31,11 @@ intervals. Missing autoscaling does not itself mean missing safe monitoring.
 
 ## Performance contract
 
+For item/shard/API work, apply [executable artifact concurrency](artifact-concurrency.md)
+alongside this contract. The mandatory per-item commit/release rule prevents
+whole-stage barriers. Native executor and quota mechanisms make dispatch/API
+decisions in code; the local single-process fixture is not distributed enforcement.
+
 Before an expensive scale-up, persist the following in the existing run plan or
 equivalent machine-readable native records. Do not create duplicate state files.
 Bind the plan revision, execution and observation schema to every tuning decision.
@@ -37,9 +43,9 @@ Bind the plan revision, execution and observation schema to every tuning decisio
 | Field | Required decision/evidence |
 | --- | --- |
 | Objective | Required output scope, first verified result time, total completion time, cost ceiling; primary objective and tie-breaker |
-| Stage map | Inputs, output commit/validator, partition or full-barrier dependency, resource owner, allowed overlap |
+| Artifact/task map | Item/frame/entity/iteration ports, output commit/validator, keyed or full-barrier dependencies, resource/session owner, allowed overlap |
 | Workload | Exact dev membership, category and size mix, model/config paths, cold/warm cache policy |
-| Measurements | Per-stage setup/service/wait/commit time, useful output count, queue age/bytes, resource peaks, failures and observation freshness |
+| Measurements | Per-node setup/service/wait/commit time, useful output count, queue age/bytes, resource peaks, failures and observation freshness |
 | Knobs | Explicit candidates/ranges, semantic classification, pilot starting point and selected configuration |
 | Budgets | Aggregate compute/memory/I/O/storage; tuning time/cost/trials, bounded retries and deadline |
 | Controller | Native owner, sample interval, observation window, minimum useful gain, stable-window count, cooldown, low/high watermarks, hard stop criteria |
@@ -64,7 +70,7 @@ Maintain two distinct readiness decisions, even when they reuse the same example
    interaction and rare-case coverage, isolation and validity requirements.
 2. Performance and capacity: cover input/output size tails, variable lengths,
    expensive execution branches, model startup, writes/checkpointing and concurrent
-   stage peaks. Measure the actual overlapped pipeline, not only isolated stages.
+   node/resource peaks. Measure the actual overlapping DAG, not only isolated nodes.
 
 Use a distribution-matched workload for expected throughput and tagged stress
 cases for capacity bounds. Report both; do not infer population throughput from
@@ -80,16 +86,54 @@ Repeat or interleave only enough matched windows to assess observed variability
 within the tuning budget. Record interference and exclude a contaminated timing
 window by a declared rule, retaining the evidence rather than cherry-picking.
 
+## Executable item and API concurrency
+
+Use the artifact DAG traced from real code. Readiness is per artifact; resource
+admission fills a shared pool across datasets. Never implement fixed dataset
+groups with group-wide completion waits. Separate partition size, live producer
+tasks and API requests/RPM/TPM.
+
+Derive the maximum admissible envelope from measured tail/overlap demand,
+resource allocations after reserves and provider quotas. Start matched pilots at
+that admissible ceiling and measure lower candidates within explicit trial/time
+budgets; use the fastest valid measured end-to-end configuration. The bundled
+probe implements descending halving, not an exhaustive or monotonic search.
+Unknown capacity needs profiling first; it does not justify launching all inputs
+blindly. Fill the selected envelope continuously and document unused capacity.
+The quota controller must share limits across datasets and worker processes,
+handle bounded classified retries and congestion recovery; never retry forever
+or duplicate per-shard quotas. ClearML Agent slots and executor resource
+tags are not provider-wide RPM/TPM enforcement. A local governor per worker is
+not a shared controller; bind an existing request gateway, distributed limiter
+or enforceable quota partition before API fan-out.
+
+Fine logical artifacts need not mean one process or API call per artifact.
+Retain coupled service microbatches and merge cheap calculations when measured
+overhead justifies it, while preserving each independent release boundary.
+Track ready-to-start delay and time-to-committed-output at each meaningful node.
+Whole-entrypoint totals can hide per-image/entity bottlenecks; no stage model
+is required for profiling or scheduling.
+
+For the ClearML-first stack, measure component startup/environment preparation,
+artifact transfer/commit and tracking overhead together with useful computation.
+Select native Pipeline or Ray Core by the graph and measured costs, not task count
+alone; [framework selection](framework-selection.md) defines their ownership.
+When Ray owns the graph, ClearML launches/observes its driver without independently
+allocating the same worker devices. Explicitly declare Actor resources and bound
+outstanding submissions; logical resource requests do not cap physical memory.
+Quota-scoped overload reduces that provider's admission, not unrelated CPU/GPU
+branches. Preserve warm model/session ownership and scientifically valid batching.
+
 ## Find and test the bottleneck
 
 Start with a valid conservative end-to-end baseline or compatible prior evidence.
-For each stage, separate time waiting for dependencies, allocation, data, execution,
+For each node, separate time waiting for dependencies, allocation, data, execution,
 validation and durable commit. Count time-to-first-output, steady-state throughput
-and final drain independently. Only compare stage capacities after normalizing
+and final drain independently. Only compare operation capacities after normalizing
 their units, fan-out and workload mix. Shared CPU/I/O/device contention means
 isolated rates cannot simply predict aggregate pipeline throughput.
 
-Investigate the observed limiting stage before raising worker counts:
+Investigate the observed limiting nodes/resources before raising worker counts:
 
 - Remove artificial whole-stage barriers where validated partitions suffice.
   Keep global normalization, fitting and order-sensitive state behind real barriers.
@@ -100,7 +144,7 @@ Investigate the observed limiting stage before raising worker counts:
 - Tune loader workers, thread pools, pinned memory, prefetch and transfers only
   when measurement implicates that path. Count nested BLAS/OpenMP threads and
   dataloader children in aggregate CPU/RAM budgets.
-- Tune microbatch, length buckets, stage concurrency and placement within the
+- Tune microbatch, length buckets, operation concurrency and placement within the
   allowed semantic contract. Preserve stable output IDs, required membership and
   stochastic/order semantics. Size-aware scheduling must not starve rare long
   jobs; record a bounded aging or fairness policy.
@@ -132,8 +176,8 @@ action emits old/new settings, reason, observation window and plan/execution IDs
 | Observation | Required action |
 | --- | --- |
 | Integrity fault, hard budget breach or monitor freshness deadline exceeded | Stop affected admission and apply the lifecycle's bounded stop/revocation policy immediately; never wait for a tuning window |
-| Queue exceeds byte/age high watermark or sustained memory/I/O pressure | Throttle the producing stage; drain within safe capacity; diagnose the consuming bottleneck |
-| Queues below low watermark, stable resource headroom, useful demand remains | Consider one preauthorized step on the limiting stage only after the declared stable-window count and cooldown |
+| Queue exceeds byte/age high watermark or sustained memory/I/O pressure | Throttle affected producers; drain within safe capacity; diagnose the consuming bottleneck |
+| Queues below low watermark, stable resource headroom, useful demand remains | Consider one preauthorized increase for the limiting operation/resource after the declared stable-window count and cooldown |
 | Trial gains exceed minimum useful gain and observed uncertainty; all gates hold | Accept at a safe task/checkpoint boundary and record the new policy revision |
 | Gain absent, end-to-end latency worsens, or resource contention rises | Reject trial and return to the last valid configuration at a safe boundary |
 | Task mix changes, tails dominate or measurement becomes incomparable | Hold growth, reprofile within remaining budget, then keep or revise measured settings |
@@ -163,14 +207,14 @@ At closure, attach a compact performance report to the existing result index:
   time, required coverage and per-stratum/size throughput where informative;
 - unique newly computed validated outputs per measured time versus cache/reuse
   completions separately; current validity after revocation;
-- per-stage waiting/queue age, limiting resource, measured idle reasons and unknowns;
+- per-node waiting/queue age, limiting resource, measured idle reasons and unknowns;
 - compute/cost spent in failures, retries, speculative duplicates, setup and
   tuning, with measured versus estimated attribution and no double-counting;
 - retained intermediates, reused artifacts, remaining stragglers and why required
   coverage is complete or incomplete; unresolved performance opportunities.
 
 Fast easy rows alone cannot establish full-workload throughput. Exclusions and
-failures remain in denominators and scientific accounting. Overlapping stage times
+failures remain in denominators and scientific accounting. Overlapping node times
 are not additive wall time; device busy fractions are not billed GPU-hours.
 An optimization pass is not a new scientific completion gate or permission to
 stop a requested study after a good pilot.
@@ -186,10 +230,12 @@ instead takes 12 s, it becomes the bottleneck; adding generation workers builds
 a queue. More scoring capacity is justified only if the end-to-end pilot proves
 it helps within aggregate limits.
 
-The control contract above is a design requirement, not an implemented adaptive
-runner. The bundled GPU helper only validates plans and inventories devices.
-Backend admission, feedback, freshness, cancellation and restore must be tested
-before claiming runtime enforcement or a performance improvement.
+The full control contract above remains a backend requirement. The bundled Python
+reference implements local artifact scheduling, bounded measured selection and
+API congestion control; it is not a distributed autoscaler or an independent
+watchdog. The GPU helper only validates plans and inventories devices. Backend
+admission, feedback, freshness, cancellation and restore must be tested before
+claiming those runtime guarantees or a performance improvement.
 
 The [PyTorch Performance Tuning Guide](https://docs.pytorch.org/tutorials/recipes/recipes/tuning_guide.html)
 supports workload-specific tuning of asynchronous data loading, pinned memory,

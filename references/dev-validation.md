@@ -35,6 +35,21 @@ source site, rare formats, empty/corrupt input policy, difficult examples and
 memory/latency extremes. Use stratified deterministic sampling where useful;
 preserve selection code, membership, random seed, counts and known gaps.
 
+For candidate-effect screening, identify the strata the changed mechanism can
+affect before observing candidate outcomes. Preserve controls needed to detect
+regressions outside that scope. Use the declared uncertainty/power method and
+comparable prior or authorized pilot evidence to assess whether the screen can
+resolve the expected effect; never invent a noise floor from a small sample.
+If it cannot, omit the effect screen and use the declared full paired protocol
+when authorized, or record that next step without launching. This skips neither
+engineering correctness/capacity checks nor held-out-data safeguards. Do not
+reject a candidate for an inconclusive screen or rerun until a favorable result.
+Record the screening decision and its evidence before comparison outcomes.
+
+An affected-stratum screen is not a population estimate. The population-core
+rules below apply when making a population claim; engineering coverage remains
+defined by the actual execution risks, and formal membership is unchanged.
+
 Do not choose only first-arriving or easy inputs. Include the minimum baseline
 and candidate paths needed to test comparability. Keep real preprocessing,
 inference/training, serialization, validation and scoring. A stub can test a
@@ -136,7 +151,10 @@ use the same required item IDs (and declared pairing/randomness).
 
 ### 2. Choose proportions and coverage deliberately
 
-Construct one versioned dev manifest with tagged roles, not extra repositories:
+Construct one versioned dev manifest with tagged roles appropriate to its stated
+decision, not extra repositories. If using only affected-stratum screening or
+risk-based engineering coverage, record why no population core is needed and
+make no population estimate:
 
 - **Population core:** stratified probability sample approximating the target
   population proportions, within group/split and budget constraints.
@@ -251,8 +269,8 @@ per-stratum deviation and minimum/group coverage, not instead of them. Do not
 interpret this population-composition diagnostic as proof of accuracy or power.
 Exact proportionality may be impossible at small n; record integer constraints.
 
-A dev gate passes only when mandatory categories/interactions and group minima
-are satisfied, proportion deviations meet the declared core tolerance (or a
+A dev gate passes only when the intended next step's mandatory categories/interactions
+and group minima are satisfied, any population core meets its declared tolerance (or a
 reviewed contract amendment), leakage/identity checks pass, all required
 correctness/artifact/recovery/stop checks pass, and the next resource budget is
 feasible. A good aggregate score cannot hide a failing or untested stratum.

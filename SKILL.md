@@ -10,6 +10,11 @@ applicable evidence scope before loading detailed references. An engineering
 pass proves implementation behavior; a dev pass proves only its declared
 coverage/readiness gate; a formal empirical claim requires the full study.
 
+For research-project initialization/onboarding or experiment-related code/config
+changes, first use [project readiness](references/project-readiness.md) to map
+project bindings and assess change impact. Keep ordinary edits proportional;
+setup does not imply provisioning services or launching a study.
+
 For repository-based research, this is the required lifecycle entrypoint and
 GitHub is required from study planning through archive closure. Start with
 [research management](references/research-management.md) and
@@ -25,11 +30,49 @@ scheduling, monitoring and cancellation; the artifact store owns durable bytes.
 It does not install a scheduler, grant compute access, or make a prose instruction
 into an unattended watchdog. Use existing project facilities when they satisfy
 the contracts; filenames and tracking products are not scientific guarantees.
+Before assessing project support, wiring an integration or declaring launch
+readiness, read [project readiness](references/project-readiness.md). Separate
+specified requirements, concrete bindings, static evidence and runtime evidence;
+a code-only assessment never authorizes a probe or experiment.
 Keep one authority per fact: GitHub for collaborative planning and review,
 versioned contracts for scientific commitments, the executor for job state,
-and the artifact store for evidence. Do not introduce a second scheduler or
-mirror ledger. GitHub usage does not authorize unspecified writes, publication,
+and the artifact store for evidence. ClearML is the first-choice management
+platform for new research integrations: measurements, comparisons and artifact
+indexes link to those same study/trial/execution identities. It does not replace
+GitHub decisions or scientific acceptance. Preserve compliant existing platforms;
+ordinary engineering tests need no tracking server. Do not introduce a second
+scheduler or mirror ledger. GitHub usage does not authorize unspecified writes, publication,
 compute or data disclosure; bind the exact repository and authorized actions.
+
+For independent work, validated durable handoff is mandatory at the finest useful
+artifact boundary: item, frame, entity, tool request or iteration—not merely a
+whole entrypoint. The core model is one input-to-output computation DAG: each
+node accepts declared inputs and returns named outputs; edges carry committed
+artifact versions. No stage hierarchy is required. Trace and draw that graph,
+commit each independently complete output, and immediately make its own
+successors eligible. Never wait for
+an unrelated item, shard or stage. Preserve genuine coupled computations and
+declared joins. Runtime-discovered members/iterations expand the graph from
+committed decisions; do not claim arbitrary Python has a fully known static DAG.
+Read [artifact concurrency](references/artifact-concurrency.md), then bind it to
+the existing [artifact lifecycle](references/lifecycle.md) and
+[storage layout](references/storage-layout.md); do not create a separate framework
+results tree or evidence ledger.
+
+Reuse a compliant project executor. For new integrations, prefer ClearML native
+Pipeline components when dependencies are known and task overhead is suitable;
+choose Ray Core for dynamic fine-grained Python execution or resident models,
+or Snakemake for file/command/HPC graphs. Select one executor for each computation
+DAG, never require stage boundaries. Read [framework selection](references/framework-selection.md)
+and [ClearML integration](references/clearml-integration.md) before wiring the
+management/execution boundary. Keep computation-only nodes, declared ports and
+project-owned validation/commit independent of the backend. Ray-to-ClearML node
+tracking and durable recovery require explicit project bindings; they are not
+automatic native integration. The executor owns task dependencies;
+the shared quota controller owns API admission. Futures and worker counts do not
+prove durable evidence or provider limits. Fill the measured envelope without
+fixed dataset groups or LLM decisions for each dispatch. The older asyncio
+reference remains a behavioral fixture, not a second project scheduler.
 
 ## Choose the validation lane
 
@@ -78,6 +121,12 @@ These contracts apply to the selected task scope, not every software test:
   [GPU execution](references/gpu-execution.md).
 - Before expensive scale-up or throughput/concurrency tuning:
   [measured performance control](references/performance-control.md).
+- Before item/shard/API concurrency or delayed intermediate handoffs:
+  [executable artifact concurrency](references/artifact-concurrency.md).
+- Before choosing or wiring experiment-management and execution components:
+  [project readiness](references/project-readiness.md),
+  [framework selection](references/framework-selection.md) and, for the default
+  management platform, [ClearML integration](references/clearml-integration.md).
 - For current helper support and deployment boundaries:
   [compatibility and migration](README.md).
 - For rationale and source limits: [research basis](references/research-basis.md).

@@ -221,6 +221,94 @@ tests. Live allocation, cancellation and telemetry require backend verification.
 | P15 | A run is itself a latency benchmark | Treat concurrency/load/cache policy as frozen benchmark factors; no outcome-driven adaptation |
 | P16 | Resident worker runs another seed using stale RNG/state | Reset and bind execution state or isolate workers; residency is not permission to share mutable state |
 
+## Executable artifact concurrency cases
+
+These local Python tests exercise the reference; they do not prove distributed
+backend behavior or fresh-session Skill triggering. Run `test_*.py` plus the
+offline demo and inspect exact artifact/event identities.
+
+| ID | Scenario | Required executable outcome |
+| --- | --- | --- |
+| A01 | Slow s1(B), fast s1(A), independent s2(A) | s2(A) commits before s1(B); no stage-wide gather |
+| A02 | Cached s1(A), unrelated slow running root | Cached edge immediately releases s2(A), without waiting for slow root |
+| A03 | Per-item join and final summary | Join uses its exact parents; final summary verifies all required items |
+| A04 | Producer fails validation or times out | Preserve attempt/available bytes; no successor release or accepted manifest |
+| A05 | Restart, input recipe change, tampered payload | Revalidate exact matches; changed recipe invalidates descendants; corruption fails closed |
+| A06 | Six ready nodes, capacity fits only two | Run two concurrently, replenish on completion, never exceed aggregate reservation |
+| A07 | Many datasets share one API quota | One shared request/token/window/concurrency controller, not shard-local multiplied limits |
+| A08 | Non-replayable or final-attempt 429; terminal 400 | Apply shared cooldown even without retry; do not retry permanent failure |
+| A09 | Request waiting for a slot crosses deadline | Stop the wait within the cooperative deadline; no leaked request slot |
+| A10 | Largest admissible concurrency is slower | Probe top-down; select measured useful throughput, retain failure/cost evidence |
+| A11 | Fast candidate omits required outputs or reports unknown capacity | Exclude from selection; never reward incomplete coverage |
+| A12 | Concurrent controller for the same local artifact root | Exclusive owner lock prevents duplicate local dispatch |
+
+### Fine-grained backend integration acceptance (not all implemented tests)
+
+These cases apply when validating a project adapter; the local fixture's passing
+tests do not establish them. If execution is explicitly deferred, retain the
+cases and record them as unrun; do not launch a demo or study to complete a checklist.
+
+| ID | Scenario | Required behavior |
+| --- | --- | --- |
+| A13 | One image/object is ready inside a still-running stage | Commit its independently complete artifact and release its consumer; stage names impose no barrier |
+| A14 | Detector discovers entities while another image is slow | Commit exact discovered membership, expand stable child IDs without a whole-discovery gather; bound pending tasks/bytes |
+| A15 | Node computes before its output is durable | Task result exposed to dependents only after accepted commit; no raw value Future bypass |
+| A16 | Two coupled named outputs versus independent early outputs | Commit the coupled bundle atomically; split independent release boundaries instead of waiting for a large returned dict |
+| A17 | Retry/worker loss after a stochastic API effect | Reconcile exact retained attempt/provider identity; retries=0 alone does not prove no replay or exactly-once effects |
+| A18 | Worker scratch vanishes / graph driver restarts | Recover from native accepted manifests, exact expansion receipts and storage mapping, not runtime object keys or worker folders |
+| A19 | Many workers instantiate a process-local API governor | Reject multiplied quota design; use a shared controller or explicit enforceable partition |
+| A20 | Shared mutable VR state or a live simulator object | Extract isolated proposals and deterministic merge or retain explicit session ownership; no unproven reordering/serialization |
+| A21 | New framework emits a second results tree | Bind existing study/trial/execution staging, outputs and logs; one artifact authority and exact collection references |
+| A22 | Dagster dynamic generator yields an early item | Verify actual mapped-consumer release with chosen executor; do not assume yield is a streaming scheduling boundary |
+| A23 | Existing executor already meets the contract | Reuse it; no forced ClearML/Ray migration or stacked schedulers |
+| A24 | Tiny artifacts make scheduling/storage dominate | Keep fine identity/lineage while measuring safe execution fusion; do not repeat shared batched API work per object |
+
+### ClearML-first selection and handoff cases (execution deferred)
+
+These are acceptance specifications, not implemented or passing integration
+tests. Static review cannot establish SDK compatibility, durable recovery,
+fresh-session routing or a throughput improvement.
+
+| ID | Scenario | Required behavior |
+| --- | --- | --- |
+| M01 | New experiment with known independent item graph | Prefer ClearML native Pipeline; each item has its own edges, no dataset-wide gather |
+| M02 | Runtime-discovered entities or resident GPU model | Consider Ray Core, document the required ClearML record bridge and one resource owner; do not claim native automatic integration |
+| M03 | Existing compliant executor and dataset registry | Preserve facilities and records; only add missing contracts |
+| M04 | ClearML driver contains many Ray nodes | Explicitly map node/attempt/port identities and failures; driver logs alone are not per-node lineage or a native ClearML Pipeline graph |
+| M05 | Upload starts, then process dies; same artifact name reused | Uncommitted output never releases a consumer; preserve distinct physical attempts and immutable accepted identities |
+| M06 | Ray object exists but retained store is unavailable | ObjectRef/spilled object is not durable success; withhold dependent acceptance and reconcile |
+| M07 | ClearML Agent and Ray both target the same GPUs | Assign one allocation owner; driver launch is not a second worker scheduler |
+| M08 | ClearML task completed but required outputs are missing | Scientific execution remains incomplete; verify exact accepted coverage before closure |
+| M09 | Hydra multirun, ClearML HPO and Ray Tune all launch trials | Select one trial owner; retain immutable effective config and seed membership |
+| M10 | Multiple workers share provider quota and receive 429 | Quota-scoped cooldown/backoff across all workers; unaffected resource groups continue; bounded retries and no reset after restart |
+| M11 | New installation assumes MinIO is mandatory | Select an authorized maintained store; recheck version/support; do not install a product merely because its protocol is supported |
+| M12 | Ordinary engineering test invokes this Skill | Use the lightweight lane without provisioning ClearML or a scientific platform |
+| M13 | Worker restarts after committed external effect, before tracker update | Reconcile native commit/provider record; repair the tracking association without repeating computation or overwriting evidence |
+| M14 | Configuration or input version changes but Task cache matches superficially | Complete recipe/parent closure controls reuse; native cache is only a candidate lookup |
+| M15 | Shared retained-node helper used by a new executor | Preserve ArtifactRef/NodeAttempt contracts and fence/load/compute/commit order; validate the real SDK/store path only when execution resumes |
+
+## Project-readiness and statistical-screening cases
+
+Use synthetic source/config descriptions and return operational decisions only.
+No project imports, experiments, services or external mutations are authorized.
+These cases are specifications until a separate response/receipt is recorded;
+passing them cannot prove deployed enforcement or trigger reliability.
+
+| ID | Scenario | Required behavior |
+| --- | --- | --- |
+| PR01 | Code-only assessment: Ray dependency exists, store is a Protocol, entrypoint writes final batch JSONL | Separate specified/bound/static/runtime evidence; identify missing binding and per-item handoff; no readiness claim or execution |
+| PR02 | Selected scoped fallback recipe differs from a generic launcher's forwarded options | Trace precedence and actual consumption; retain effective contract; block affected launch, do not mark all historical launchers defective |
+| PR03 | Two worktrees each use a local governor and nested SDK retries against one provider quota | Require shared authority or valid aggregate quota partitions across all call paths; worktree isolation is not resource admission |
+| PR04 | Expected effect is below justified small-screen resolution; full paired study authorized but engineering checks absent | Preserve engineering checks; skip inconclusive effect gate, then follow full protocol only after required readiness; no outcome-driven reruns |
+| PR05 | Two arms have matching item IDs but independently regenerated stochastic parent bytes | Reject assumed pairing; bind exact common parents when protocol requires them; changed upstream mechanism triggers appropriate recomputation |
+| PR06 | Targeted mechanism screen covers affected strata, user asks for full-population improvement | Keep screening claim scoped; no unweighted population inference; preserve required controls and formal evaluation membership |
+| PR07 | Canonical Skill differs from installed copy; inspected commit differs from deployed worker | Report each identity and evidence limit; source edit is not activation or deployment verification |
+| PR08 | Initialize a research repository and implement one transform; no services/experiments authorized and tracker undecided | Establish only needed project bindings, record unbound status, allow authorized domain work; no platform provisioning or forced directory migration |
+| PR09 | Change scoring formula; raw predictions remain valid for both arms | Version scorer/analysis, retain raw bytes, identify affected descendants and comparisons; engineering pass does not restore scientific acceptance |
+| PR10 | Batch size and nested retries change under a performance-only label | Assess scientific equivalence and aggregate resource/side-effect impacts; do not relabel unknown equivalence as an infrastructure retry |
+| PR11 | Logging typo in a research repository with no computation/schema change | Use proportional engineering checks; no new Issue/Task/trial merely because the repository is research-oriented |
+| PR12 | New Profile routes to project-readiness but frozen APM dependency lacks it | Distinguish structurally valid Profile from activation readiness; retain truthful lock, require reviewed available Skill revision before activation; no fabricated SHA or direct projection edit |
+
 ## Server storage alignment cases
 
 These are behavioral cases; fixtures do not establish live backend guarantees.

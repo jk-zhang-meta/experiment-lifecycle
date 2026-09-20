@@ -57,13 +57,17 @@ Freeze a study revision before formal computation. Each stage has a declared
 dependency closure and input contract. Use independent partition edges when
 valid, keyed joins where needed, and full barriers only for actual global
 dependencies. Record all required outputs, not just final metrics.
+Apply [project readiness](project-readiness.md) to bind that revision to the
+effective launcher/worker configuration; distinguish static checks from runtime
+evidence before declaring the integration ready.
 
 ## 2. Develop on representative subsets
 
 Inventory the exact dataset revision/split and all task categories before selection.
 Read the dev protocol's population, quota, grouping and readiness requirements.
-Select a versioned dev set covering task strata, rare/boundary cases and resource
-extremes. Separate a distribution-matched core from tagged coverage/stress additions;
+Select a versioned engineering dev set covering relevant execution paths, task
+strata, rare/boundary cases and resource extremes. For population estimates,
+separate a distribution-matched core from tagged coverage/stress additions;
 report per-stratum counts, proportions, missing cells and sampling limitations. Preserve membership, selection code, seed, rationale and limitations.
 Reuse the real code path and artifact/monitoring mechanisms at dev scale.
 
@@ -72,8 +76,15 @@ failure detection and bounded cancellation. Expand the dev set after uncovered
 failure modes; preserve earlier revisions and executions. Never quietly redefine
 the held-out evaluation set or tune against its outcomes.
 
-Use the first trustworthy dev result to decide the next step. Before scaling,
-require an adequate dev coverage report, working evidence path and stop mechanism,
+Statistical candidate screening is a separate decision: select strata the change
+can affect and assess detectable effect against justified uncertainty/noise, as
+specified in [dev validation](dev-validation.md). An underpowered screen cannot
+reject a candidate or become a mandatory superiority gate. Omit that screen in
+favor of the declared full paired protocol when warranted; preserve engineering
+checks and do not infer execution authority from this exception.
+
+Use the first trustworthy engineering dev result to decide the next step. Before scaling,
+require adequate engineering coverage, a working evidence path and stop mechanism,
 and a measured resource forecast with uncertainty. A canary prefix of the formal
 run may validate scale behavior while monitoring remains active throughout.
 Dev and formal runs share lineage, not an assumed scientific equivalence.

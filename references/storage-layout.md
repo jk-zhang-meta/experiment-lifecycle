@@ -4,7 +4,9 @@ Read before remote research execution, shared result writes, storage relocation,
 recovery or archive closure. The [artifact contract](lifecycle.md) owns acceptance,
 invalidation and retention; [GitHub workflow](github-workflow.md) owns repository
 binding and reporting; [collaboration](collaboration.md) owns execution claims.
-This reference maps those contracts to storage. It introduces no scheduler,
+For item-granular handoff and framework-owned I/O, also read
+[artifact concurrency](artifact-concurrency.md) and [ClearML integration](clearml-integration.md).
+Adapters preserve the store contract. This reference maps those contracts to storage. It introduces no scheduler,
 mirrored job database, mandatory tracking product or new v1 helper schema.
 
 ## Contents
@@ -55,6 +57,38 @@ existing exclusive claim/dispatch mechanism. Independent nodes must not invent
 colliding local counters; a unique directory alone does not prevent duplicate
 scientific work. See the collaboration contract for fencing and takeover.
 
+Keep these three identities separate in native records and manifests:
+
+| Layer | Meaning | Examples |
+| --- | --- | --- |
+| Logical output key | Stable scientific address of a requested output port | dataset revision, item/frame/entity ID, condition, node/operation, iteration and output-port |
+| Immutable artifact version | Exact content produced for that key | recipe version/digest, exact immutable input artifact refs, payload digest/schema and validator/commit receipt |
+| Physical production | One realized execution of a producer | trial attempt, execution ID, node-attempt ID, provider job/rank and retry/resume parent |
+
+The logical key answers what output is wanted; it does not identify bytes or a
+retry. Recipe and input artifact versions answer which immutable computation was
+accepted. Execution and node-attempt IDs answer which physical work produced or
+failed to produce it. A manifest is the stable namespace locator from the key to
+the accepted immutable version and its exact parents; mutable attempt paths,
+directory listings and `latest` aliases are never that locator.
+
+For ClearML, retain the server/deployment identity plus project, controller Task,
+component Task and actual attempt IDs in the existing execution record. Task IDs
+are associations, not replacements for study/trial/execution/node-attempt IDs.
+In Ray mode also bind job/task/actor identities where applicable; one driver Task
+does not prove that its internal nodes have individual retained records. Put
+artifact indexes in ClearML with stable native refs and checksums; keep payloads,
+staging and logs under the same declared storage namespace and retention policy.
+An index may point at existing retained bytes instead of making a second copy.
+Do not let Task deletion, cache eviction or a tracker cleanup rule delete required
+evidence. Preserve tracking metadata/export needed for recovery as well as bytes.
+
+The storage model has no required stage hierarchy: one computation DAG has nodes
+that independently accept inputs and return outputs, with immutable artifacts as
+edges. Existing native `stage` fields or group labels may remain as optional
+metadata; map them to nodes and do not require a stage directory or
+stage-wide storage barrier.
+
 Default logical layout when no equivalent structure exists:
 
 ```text
@@ -68,9 +102,15 @@ Default logical layout when no equivalent structure exists:
       trial-record               # condition, replicate and effective recipe
       attempts/<attempt-id>/
         execution-record         # intent, native job binding and receipt links
-        logs/                    # retained logs/events, including failed runs
-        staging/                 # exclusive incomplete output namespace
-        outputs/                 # committed immutable versions/manifests
+        logs/node-attempts/<node-attempt-id>/
+                                # retained task logs/events, including failures
+        staging/node-attempts/<node-attempt-id>/
+                                # exclusive incomplete bytes for one producer
+        outputs/node-attempts/<node-attempt-id>/
+                                # committed payload bytes, never discovery input
+        outputs/manifests/<logical-key>/<artifact-version>
+                                # stable locator: parents, bytes, validation,
+                                # accepted generation and node-attempt link
     analyses/<analysis-id>/       # exact accepted input collection and outputs
     decisions/                   # evidence or references to authoritative decisions
   shared/                        # retained immutable reusable artifacts/references
@@ -92,12 +132,22 @@ ranks write parts of one attempt, give them disjoint producer/rank namespaces
 and a designated bundle committer; they do not become independent replicas.
 
 A retry gets a new physical attempt and parent link, even when resuming a
-checkpoint. Preserve the bundled v1 distinction: its semanticAttemptId is not
-this physical attempt; executionId supplies that identity. Do not change old
-sealed records to adopt these illustrative names. Scratch is not accepted durable
-evidence; declare continuous transfer/checkpoint cadence and its possible loss
-window before using ephemeral nodes. Node loss before transfer is an explicit
-retention gap, not an excuse to invent a complete receipt.
+checkpoint. A node retry also gets a new node-attempt ID inside the trial attempt;
+the task directory maps task-local mutable state to that ID and never replaces
+the accepted logical-output locator. Preserve the bundled v1 distinction: its
+semanticAttemptId is not this physical attempt; executionId supplies that
+identity. Do not change old sealed records to adopt these illustrative names.
+Scratch is not accepted durable evidence; declare continuous transfer/checkpoint
+cadence and its possible loss window before using ephemeral nodes. Node loss
+before transfer is an explicit retention gap, not an excuse to invent a complete
+receipt.
+
+Shared source inputs and reusable outputs are immutable references, not copied
+or rewritten per retry. Each consumer pins the exact accepted artifact ref it
+uses; a later task attempt may reuse that ref after normal validity checks. The
+final collection is an explicit fan-in manifest over declared membership, never
+a scan of attempt output folders. Retain failed node directories, partials and
+logs alongside successful evidence.
 
 ## 3. Bind execution and reporting
 
@@ -115,8 +165,10 @@ Use existing native records, with one writer per conflicting scope:
    occurred. A real new physical retry gets its own identity and parent link.
 3. Producers commit complete partitions under the artifact contract. An upload,
    directory rename or process exit is not acceptance by itself. The destination
-   manifest binds exact members, digests, sizes, parents and validation receipts.
-   Preserve incomplete bytes separately. Consumers read accepted exact versions.
+   manifest binds the logical output key, exact members, digests, sizes, recipe,
+   immutable parents, validator/commit receipts and producing execution/node
+   attempt. Preserve incomplete bytes separately. Consumers read accepted exact
+   versions through the manifest locator.
 4. Persist terminal execution evidence separately from coverage/validity. Analysis
    binds a collection version and current invalidations; its result cannot derive
    membership from a directory glob, `latest`, or a highest-score filename.
@@ -136,6 +188,13 @@ the store. Include schema/version, content digest and locator of that inventory.
 Link referenced source/config/protocol versions rather than copying all of them
 per attempt. Reuse requires retained, accessible bytes and valid lineage; links
 alone are not recoverability. No new service is needed for an index of pointers.
+
+When a graph expands from discovered data, retain an immutable expansion receipt:
+the decision recipe/version, exact discovery inputs, resulting membership/keys,
+time/execution identity and validation. Replay later work from that receipt
+instead of rerunning expensive or stochastic discovery. A receipt may add nodes
+or close a dynamic membership set; it must not misrepresent the graph as fully
+static before that decision exists.
 
 ## 4. Reconcile without guessing
 
@@ -221,3 +280,18 @@ From E an authorized reader can locate V and its actual bytes; from A2 an agent
 can recover the exact study, source, owner and job without relying on chat.
 AN3 is provisional if it lacks required coverage. This example is a contract,
 not an installed writer, reconciler or server migration tool.
+
+One item-level mapping within that example is:
+
+```text
+logical key:  dataset D9@r4 / frame F12 / operation infer / iteration 0 / port logits
+recipe+inputs: infer@K8 + input artifact raw:F12@sha256:... + model:M3@sha256:...
+physical work: trial T7 / execution A2 / node attempt N2 (retry parent N1)
+staging:       trials/T7/attempts/A2/staging/node-attempts/N2/
+accepted ref:  trials/T7/attempts/A2/outputs/manifests/<escaped-key>/V6
+final fan-in:  collection V9 lists V6 and every other declared frame ref
+```
+
+The `V6` manifest, not the task directory, is the stable locator consumed by a
+scorer or final collection. If N2 fails, its staging and logs remain retained;
+if it succeeds, a later retry reuses V6 only by its exact immutable reference.
