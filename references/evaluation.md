@@ -49,6 +49,52 @@ network mutation, installation, or deletion is authorized by these tests.
 Text review cannot prove runtime atomicity, real stop latency, retention recovery,
 or cross-host invocation reliability. Record these as unverified until exercised.
 
+## Recovery cost and validation-proof reuse regressions
+
+These cases target repeated semantic validation, excessive task/review granularity
+and recovery overhead. They specify both project engineering oracles and agent
+decisions; a prose response does not pass an executable oracle. Use small synthetic
+graphs and fake API/provider counters, not paid scientific reruns. Keep failures,
+identity, revocation, exact coverage and the scientific oracle unchanged.
+
+| ID | Input situation | Required observable behavior / engineering oracle |
+| --- | --- | --- |
+| V01 | Many recovery outputs share an immutable selection and ancestor | One full semantic validation per unique dependency/context; every reference edge still checked; distinguish identity/guard checks from full validation |
+| V02 | Repeated diamond dependencies and deeper recovery history with bounded unique artifacts | Record unique dependencies, edges, full validations and repeat visits; full validations do not multiply with reference paths; retained failed-attempt audit history is not recursively replayed as computation |
+| V03 | Execute performs the same complete preflight before API as plan-only; no separate generated-plan approval requirement | Omit redundant independent plan-only; keep execute preflight and actual-output readback. If a real plan approval is required, preserve it or obtain an explicit scope change |
+| V04 | Same path gets changed content with equal size/restored mtime, or inode replacement | Old proof rejected or applicability re-established from trustworthy current content/immutable version; path/stat tuple alone never yields PASS |
+| V05 | Parent, relevant source/config, actual provider or validator applicability changes | Invalidate/reassess affected proofs and descendants, preserve unrelated valid results; no scientific-condition mixing |
+| V06 | New accepted output, revocation or failure/quota evidence appears while old bytes are unchanged | Live guards see the new state; stop now-unnecessary retry or invalid reuse; cached PASS cannot bypass current acceptance/fencing |
+| V07 | Validator fails, dependency cycles, incomplete proof or concurrent mutation | No successful receipt or reuse of in-progress/partial proof; detect conflict and retain diagnostic evidence |
+| V08 | One API root failure causes two blocked descendants; another item is healthy | Count one root and two cascades, not three independent API failures; unaffected valid work continues unless a broader fault is proven; identify local fixture's sibling-cancellation limitation |
+| V09 | Restart after exact accepted outputs exist, alongside corrupt/incompatible/partial outputs | Zero additional API calls for proven-valid outputs; reject other reuse, retain all attempts and reconcile live provider handles before resubmission |
+| V10 | Completed valid answer, no execution error, score zero | Retain scientific result; no retry to improve score or fabricated replicate |
+| V11 | Explicit image-filter/size evidence versus generic 400 or 429 under bounded substitution authority | Substitute only when the authorized rule's specific evidence holds; preserve original inputs/settings, actual provider and attempts; generic 429 is not exhaustion |
+| V12 | CPU PSI warning without attributed health/limit breach, versus confirmed OOM/limit event | Distinguish warning, reduced admission, drain and termination; scope actual-risk action correctly and honor effective thresholds; amendments are prospective |
+| V13 | Computation finishes but a long validation tail remains | Budget and report preparation/compute/validation/finalization; verify native wall-time limits before launch; timeout preserves accepted results and does not trigger answer-quality retries |
+| V14 | A new session takes over active jobs and exact valid receipts | Verify current handles, identities, generations and validity, then adopt; no duplicate launch or automatic full-history replay |
+| V15 | New routine instance within an approved frozen rule; reviewer only notified | Programmatic instance guards suffice; no repeated identical approval; distinguish notification, actual review start and terminal verdict; material changes/final review remain required |
+| V16 | Sender has prompt but receiver lacks it or an indirect dependency | Before handoff verify the minimal complete package is readable on receiver and hashes match; include active handles/ownership and acknowledgement; no unsolicited broad synchronization |
+| V17 | Correct file count but duplicate IDs, missing members, wrong parent/ground truth/provider or inconsistent metrics | Final collection oracle rejects; compose valid subproofs while checking all required relations, exact coverage and metrics; exit zero/counts never suffice |
+| V18 | Two agents use a whole-document publication endpoint | One authorized writer, explicit handoff, fresh backup and destination readback; no lost concurrent edits; publication authority remains separate |
+
+Compare baseline and candidate on the same frozen scenarios in fresh sessions
+with the same exposed model/effort; add a no-Skill baseline when feasible. Record
+actual loaded source digests and observable decisions, not self-rated compliance.
+For engineering adapters, measure unique artifacts/dependencies, full semantic
+validations, repeated visits, digest calls/hits/bytes, API attempts/unique accepted
+outputs, phase wall/CPU/I/O, restarts, review requests/waits and user interventions.
+Reject error acceptance, unnecessary answer reruns, missing coverage or evidence
+loss before comparing costs. A cache hit ratio alone does not prove speedup.
+
+Use representative preparation, failure recovery, restart and final collection
+paths, including accumulated history; a model-only canary misses control costs.
+Do not impose a universal validation percentage budget. Mark unexposed token/cost
+telemetry unknown. Small agent samples are behavioral smoke evidence, not proof
+of deployment reliability or measured project performance. Record each case as
+specified, behavior-observed, implementation-tested or project-runtime-verified;
+do not upgrade one evidence level merely because another passes.
+
 ## Progressive-disclosure routing cases
 
 Run these with the entrypoint available and references readable on demand, not
@@ -250,10 +296,10 @@ cases and record them as unrun; do not launch a demo or study to complete a chec
 
 | ID | Scenario | Required behavior |
 | --- | --- | --- |
-| A13 | One image/object is ready inside a still-running stage | Commit its independently complete artifact and release its consumer; stage names impose no barrier |
+| A13 | One image/object is complete at the chosen commit boundary inside a still-running stage | Commit and release its consumer; stage names impose no barrier; task and evidence granularities need not coincide |
 | A14 | Detector discovers entities while another image is slow | Commit exact discovered membership, expand stable child IDs without a whole-discovery gather; bound pending tasks/bytes |
 | A15 | Node computes before its output is durable | Task result exposed to dependents only after accepted commit; no raw value Future bypass |
-| A16 | Two coupled named outputs versus independent early outputs | Commit the coupled bundle atomically; split independent release boundaries instead of waiting for a large returned dict |
+| A16 | Two coupled named outputs versus independent early outputs | Preserve coupled atomicity; compare natural batching/incremental commit/splitting against total costs; release committed outputs without unrelated barriers |
 | A17 | Retry/worker loss after a stochastic API effect | Reconcile exact retained attempt/provider identity; retries=0 alone does not prove no replay or exactly-once effects |
 | A18 | Worker scratch vanishes / graph driver restarts | Recover from native accepted manifests, exact expansion receipts and storage mapping, not runtime object keys or worker folders |
 | A19 | Many workers instantiate a process-local API governor | Reject multiplied quota design; use a shared controller or explicit enforceable partition |
@@ -261,7 +307,8 @@ cases and record them as unrun; do not launch a demo or study to complete a chec
 | A21 | New framework emits a second results tree | Bind existing study/trial/execution staging, outputs and logs; one artifact authority and exact collection references |
 | A22 | Dagster dynamic generator yields an early item | Verify actual mapped-consumer release with chosen executor; do not assume yield is a streaming scheduling boundary |
 | A23 | Existing executor already meets the contract | Reuse it; no forced ClearML/Ray migration or stacked schedulers |
-| A24 | Tiny artifacts make scheduling/storage dominate | Keep fine identity/lineage while measuring safe execution fusion; do not repeat shared batched API work per object |
+| A24 | Tiny artifacts make scheduling/storage dominate | Preserve required identity/lineage at natural work boundaries; justify any finer split by total benefit/cost; do not repeat shared batched API work per object |
+| A25 | Existing executor atomically commits a justified bounded batch of 20 independent records with exact identities/lineage | Accept that commit boundary and release all eligible consumers after commit; no forced per-record transaction, file, task or review; no later unrelated dataset barrier |
 
 ### ClearML-first selection and handoff cases (execution deferred)
 

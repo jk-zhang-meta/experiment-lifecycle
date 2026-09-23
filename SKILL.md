@@ -44,20 +44,27 @@ ordinary engineering tests need no tracking server. Do not introduce a second
 scheduler or mirror ledger. GitHub usage does not authorize unspecified writes, publication,
 compute or data disclosure; bind the exact repository and authorized actions.
 
-For independent work, validated durable handoff is mandatory at the finest useful
-artifact boundary: item, frame, entity, tool request or iteration—not merely a
-whole entrypoint. The core model is one input-to-output computation DAG: each
-node accepts declared inputs and returns named outputs; edges carry committed
-artifact versions. No stage hierarchy is required. Trace and draw that graph,
-commit each independently complete output, and immediately make its own
-successors eligible. Never wait for
-an unrelated item, shard or stage. Preserve genuine coupled computations and
-declared joins. Runtime-discovered members/iterations expand the graph from
-committed decisions; do not claim arbitrary Python has a fully known static DAG.
+Reuse the project's natural work boundaries and native dependency records.
+Separate logical evidence, durable commit, execution task and human review units;
+they need not map one-to-one. Split further only when expected reuse, failure
+isolation or overlap benefits justify dispatch, validation, storage, refactoring
+and review costs. Routine resumption does not require an architecture migration
+or a new diagram. Bind exact input/output dependencies, commit complete outputs
+at the chosen boundary and release their consumers without unrelated barriers.
+Preserve genuine coupled computations and joins; runtime-discovered members
+expand from committed decisions, not an assumed fully static Python DAG.
 Read [artifact concurrency](references/artifact-concurrency.md), then bind it to
 the existing [artifact lifecycle](references/lifecycle.md) and
 [storage layout](references/storage-layout.md); do not create a separate framework
 results tree or evidence ledger.
+
+Distinguish first full validation, current identity/validity checks, affected-scope
+revalidation and final collection acceptance. Reuse applicable completed proofs
+under the [lifecycle contract](references/lifecycle.md); do not recursively rebuild
+unchanged history for each consumer. Measure preparation, recovery, validation
+and finalization as well as computation before scale-up. Approved bounded rules
+cover routine instances through programmatic guards, not per-item LLM approval;
+material changes and final acceptance retain their required review.
 
 Reuse a compliant project executor. For new integrations, prefer ClearML native
 Pipeline components when dependencies are known and task overhead is suitable;

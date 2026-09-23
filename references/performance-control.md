@@ -16,7 +16,10 @@
 Use this contract before scaling expensive experiments or diagnosing material
 waiting and throughput problems. Ordinary short tests need no tuning campaign.
 Optimize time to the requested verified result under scientific, resource and
-retention constraints. GPU utilization is supporting telemetry, not the objective.
+retention constraints. Include preflight, history and semantic validation, recovery,
+restart, post-validation, aggregation and review waits in that elapsed time and its
+budget, alongside computation and API calls. GPU utilization is supporting telemetry,
+not the objective.
 No policy guarantees a global optimum across an unmeasured configuration space.
 
 The agent defines the study, admissible knobs, budgets and evidence interpretation.
@@ -32,8 +35,9 @@ intervals. Missing autoscaling does not itself mean missing safe monitoring.
 ## Performance contract
 
 For item/shard/API work, apply [executable artifact concurrency](artifact-concurrency.md)
-alongside this contract. The mandatory per-item commit/release rule prevents
-whole-stage barriers. Native executor and quota mechanisms make dispatch/API
+alongside this contract. Release consumers at the chosen durable commit boundary,
+including a justified bounded batch with exact record identities; do not add an
+unrelated whole-stage barrier. Native executor and quota mechanisms make dispatch/API
 decisions in code; the local single-process fixture is not distributed enforcement.
 
 Before an expensive scale-up, persist the following in the existing run plan or
@@ -45,9 +49,9 @@ Bind the plan revision, execution and observation schema to every tuning decisio
 | Objective | Required output scope, first verified result time, total completion time, cost ceiling; primary objective and tie-breaker |
 | Artifact/task map | Item/frame/entity/iteration ports, output commit/validator, keyed or full-barrier dependencies, resource/session owner, allowed overlap |
 | Workload | Exact dev membership, category and size mix, model/config paths, cold/warm cache policy |
-| Measurements | Per-node setup/service/wait/commit time, useful output count, queue age/bytes, resource peaks, failures and observation freshness |
+| Measurements | Preflight, unique-dependency validation, execution, restart/recovery, post-validation, aggregation and review-wait time; per-node setup/service/wait/commit time, useful output count, queue age/bytes, resource peaks, failures and observation freshness |
 | Knobs | Explicit candidates/ranges, semantic classification, pilot starting point and selected configuration |
-| Budgets | Aggregate compute/memory/I/O/storage; tuning time/cost/trials, bounded retries and deadline |
+| Budgets | Aggregate compute/memory/I/O/storage; preparation, execution, recovery, verification, aggregation and review time; tuning cost/trials, bounded retries and end-to-end deadline |
 | Controller | Native owner, sample interval, observation window, minimum useful gain, stable-window count, cooldown, low/high watermarks, hard stop criteria |
 | Recovery | Last proven configuration, safe change boundary, cancellation/drain deadline and evidence references |
 
@@ -64,7 +68,10 @@ with the scientific contract may change within one condition.
 
 ## Two dev gates
 
-Maintain two distinct readiness decisions, even when they reuse the same examples:
+Maintain two distinct readiness decisions. Reuse applicable prior capacity evidence;
+one representative canary may support both decisions when it exercises both
+contracts. Do not require a second run or a matrix of canaries solely because the
+conclusions are recorded separately:
 
 1. Correctness and scientific coverage: use the dev protocol's category, group,
    interaction and rare-case coverage, isolation and validity requirements.
@@ -78,9 +85,20 @@ an all-tail sample or safety from an average-only sample. If output length is
 unknown, declare an authorized bound or conservative forecast and watch actual
 growth. Reprofile when schema, model, shape mix or relevant resources change.
 
+Before scale-up, exercise representative preparation, execution, failed-item
+recovery, restart reuse, final validation and aggregation paths, using compatible
+existing evidence where available. Measure phase wall time, CPU/I/O, unique
+dependencies and full semantic validations, distinct API attempts, newly accepted
+outputs and actual bytes read or written. Internal node or digest-call counts are
+diagnostics; they are not API requests, independent samples, or a substitute for
+measured bytes. Unexpected growth in repeated validation as recovery history grows
+needs diagnosis before scaling, without weakening exact-parent or final-coverage checks.
+
 Record startup and compilation separately, but include them in full-run forecasts.
 Compare candidates using the same work identities, comparable resource allocation,
-cache state and warm-up protocol. Use framework timing that accounts for
+cache state and warm-up protocol. Include preflight and validation tails in the
+end-to-end comparison; a fast compute phase can still miss the declared deadline.
+Use framework timing that accounts for
 asynchronous device work; timing enqueue calls alone is not compute latency.
 Repeat or interleave only enough matched windows to assess observed variability
 within the tuning budget. Record interference and exclude a contaminated timing
@@ -94,9 +112,10 @@ groups with group-wide completion waits. Separate partition size, live producer
 tasks and API requests/RPM/TPM.
 
 Derive the maximum admissible envelope from measured tail/overlap demand,
-resource allocations after reserves and provider quotas. Start matched pilots at
-that admissible ceiling and measure lower candidates within explicit trial/time
-budgets; use the fastest valid measured end-to-end configuration. The bundled
+resource allocations after reserves and provider quotas. Reuse applicable prior
+evidence; when tuning is justified, matched pilots may start at that admissible
+ceiling and measure lower candidates within explicit trial/time budgets. Use the
+best valid measured configuration for the declared objective. The bundled
 probe implements descending halving, not an exhaustive or monotonic search.
 Unknown capacity needs profiling first; it does not justify launching all inputs
 blindly. Fill the selected envelope continuously and document unused capacity.
@@ -127,9 +146,10 @@ branches. Preserve warm model/session ownership and scientifically valid batchin
 ## Find and test the bottleneck
 
 Start with a valid conservative end-to-end baseline or compatible prior evidence.
-For each node, separate time waiting for dependencies, allocation, data, execution,
-validation and durable commit. Count time-to-first-output, steady-state throughput
-and final drain independently. Only compare operation capacities after normalizing
+Separate preflight/history checks, dependency and allocation waits, data loading,
+execution, durable commit, restart/recovery, post-validation, aggregation and review
+waits. Count time-to-first-output, steady-state throughput and final drain
+independently. Only compare operation capacities after normalizing
 their units, fan-out and workload mix. Shared CPU/I/O/device contention means
 isolated rates cannot simply predict aggregate pipeline throughput.
 
@@ -176,7 +196,8 @@ action emits old/new settings, reason, observation window and plan/execution IDs
 | Observation | Required action |
 | --- | --- |
 | Integrity fault, hard budget breach or monitor freshness deadline exceeded | Stop affected admission and apply the lifecycle's bounded stop/revocation policy immediately; never wait for a tuning window |
-| Queue exceeds byte/age high watermark or sustained memory/I/O pressure | Throttle affected producers; drain within safe capacity; diagnose the consuming bottleneck |
+| Pressure warning, including CPU PSI without task attribution or a confirmed limit breach | Inspect corroborating resource, task and responsiveness evidence; do not treat the proxy alone as an automatic kill criterion |
+| Queue exceeds byte/age high watermark or sustained attributable memory/I/O pressure | Reduce affected admission; drain within safe capacity and deadline; diagnose the consuming bottleneck |
 | Queues below low watermark, stable resource headroom, useful demand remains | Consider one preauthorized increase for the limiting operation/resource after the declared stable-window count and cooldown |
 | Trial gains exceed minimum useful gain and observed uncertainty; all gates hold | Accept at a safe task/checkpoint boundary and record the new policy revision |
 | Gain absent, end-to-end latency worsens, or resource contention rises | Reject trial and return to the last valid configuration at a safe boundary |
@@ -187,6 +208,11 @@ and bounded upward steps to avoid oscillation. The stable-window rule applies to
 optimization, never to emergency stopping. Reducing admission may drain existing
 valid work; it does not instantly reduce resident memory. Bound the drain and
 account for transition peaks and allocations until release is confirmed.
+Define warning, admission reduction, bounded drain and termination as distinct
+actions with their own evidence, scope and deadlines. A confirmed OOM, hard limit
+or integrity fault may require immediate termination of affected work; a proxy
+warning alone does not. Revise thresholds prospectively against measured evidence;
+the new rule does not retroactively excuse a breach under the rule then in force.
 
 Do not change training topology/batch/order or other semantic factors under this
 feedback rule unless the study expressly defines them as an allowed policy.
@@ -194,6 +220,13 @@ If current capacity cannot support the last proven configuration, pause; do not
 blindly restore settings measured under different resource availability.
 
 ## Retention and completion
+
+Report required final result units (for example sample × condition), root failures
+and affected descendants, current phase and the next evidence boundary. Internal
+node percentages are diagnostics, not remaining-time estimates. Distinguish job
+submission/start, actual computation, accepted outputs, collection validation and
+publication. Report changed evidence or real blockers; routine unchanged polling
+belongs to the native monitor, not repetitive user messages.
 
 Queue occupancy and retained storage are separate budgets. Consuming a partition
 can release queue capacity while its retained artifact still occupies durable
@@ -203,7 +236,8 @@ monitor bytes; pause rather than erase evidence when capacity is inadequate.
 At closure, attach a compact performance report to the existing result index:
 
 - workload scope, baseline/selected settings and retained tuning evidence;
-- time to first verified result, setup, steady-state and drain time, total elapsed
+- time to first verified result, preflight, validation, recovery, review wait,
+  setup, steady-state and drain time, total elapsed
   time, required coverage and per-stratum/size throughput where informative;
 - unique newly computed validated outputs per measured time versus cache/reuse
   completions separately; current validity after revocation;

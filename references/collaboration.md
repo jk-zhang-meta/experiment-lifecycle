@@ -128,6 +128,15 @@ being unavailable leaves a gap; continue independent work rather than creating
 fake identities or silently self-approving. Do not create new review ceremonies
 for every routine task or require a human where the contract does not.
 
+A revision-bound decision may approve a bounded execution or recovery rule: frozen
+code and scientific parameters, eligible inputs and provider scope, failure
+classification, resource limits, live guards and invalidation conditions. Within
+that exact scope, the native controller checks ordinary instances and executes
+them without a new agent or human approval for each item. Record the rule and
+instance receipts. Material code, scientific, provider or protocol changes, failed
+guards and work outside the approved bounds return to the applicable decision
+owner; final scientific acceptance still checks the exact completed result set.
+
 An agent using a human credential must not manufacture a human-only approval
 through `gh pr review --approve` or an API equivalent. It may relay an explicit
 human decision only when the exact subjects, decision provenance and external
@@ -140,6 +149,11 @@ Bind review to source head and relevant base/tested integration, study/analysis
 revision, exact evidence collection, scope and reviewer actor. Stale-approval
 dismissal or latest-push review can enforce parts of this under repository-admin
 authority; scientific evidence still needs reassessment after material changes.
+Independent review may inspect exact applicable validation receipts, decisive
+inputs and current validity instead of repeating every full historical check or
+computation. It must still test the claimed scope and report missing or stale
+proof; a review receipt never substitutes for first validation, current guards or
+the final scientific oracle.
 An automated launch verifies actor, permitted action and immutable subjects against
 the existing authority record; arbitrary labels/comments or embedded shell text
 are not execution approval.
@@ -167,11 +181,22 @@ budget, pending external effects and next bounded action. Link branch/PR and
 temporary evidence requiring retention. Do not rely on chat recollection, private
 reasoning transcripts or an unversioned latest path.
 
+For a cross-host handoff, identify the smallest complete dependency package needed
+for that next action, including referenced review/validation receipts and active
+job handles. Before offering transfer, verify the recipient host and identity can
+read every required file and indirect dependency and that read-back digests match
+the intended versions. Keep private paths and credentials within their authorized
+boundary. A delivered notification proves only delivery; verify that the task or
+review actually started before reporting it as active.
+
 The recipient acknowledges after verifying those references, current validity,
 provider state and authority. Transfer ownership through the existing claim
 mechanism, then update GitHub. An absent recipient leaves handoff pending; stop
 new conflicting dispatch while native monitoring continues independently. Old
 and new owners must not both assume cancellation/acceptance responsibility.
+Applicable completed validation receipts may be reused after identity, scope,
+revocation and live-guard checks; a handoff does not require re-running the whole
+historical acceptance path.
 
 Until transfer is acknowledged and recorded, the current execution owner retains
 monitoring and emergency-cancellation responsibility through the native supervisor.
@@ -201,6 +226,11 @@ evidence/decision comments or propose changes by PR. Re-read authoritative recor
 before summary updates, preserve human edits and historical evidence. If shared
 prose cannot be updated safely, append/link a new summary instead of overwriting.
 A marker or timestamp is not compare-and-set.
+The same single-writer rule applies to shared whole-document publication surfaces:
+assign an integration owner, check the current document and a fresh recoverable
+copy before replacing it, and read back the published result. Parallel contributors
+provide reviewed inputs to that owner; a complete-document upload must not overwrite
+another contributor's accepted changes.
 
 Default automated progress reporting to new attributed comments or reviewed
 versioned records, not full-body PATCH of a human-editable goal/experiment Issue.

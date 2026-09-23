@@ -74,7 +74,9 @@ Wait for upload success, verify the declared retained destination and publish th
 commit before exposing the reference. Tracker updates and object writes are not
 one cross-service transaction: use the native commit as the authority and repair
 missing tracker associations idempotently without repeating scientific effects.
-Native task cache matches must still pass complete recipe/parent validation.
+Native task cache matches must establish complete recipe/parent validity, using
+applicable completed validation evidence under section 3 rather than rerunning
+every unchanged ancestor's full validator.
 
 The producer writes exclusively under its execution/generation and node-attempt
 staging prefix. Nodes are computation only: they receive framework-resolved
@@ -148,11 +150,57 @@ output schema, semantic environment/hardware, and stochastic/replicate semantics
 Full-study identity remains attached as provenance but is not an indiscriminate
 cache key forcing unrelated GPU recomputation after a plotting change.
 
-A matching key is only a candidate. Verify bytes are retained and accessible,
-coverage is exact, validation is applicable, no revocation applies, and reuse is
-scientifically permitted. Validator changes require revalidation; a scientific
-definition change may also require a new study/analysis revision. Never reuse
-because a path exists or its modification time looks recent.
+A matching key is only a candidate. Establish retained accessible content identity,
+exact coverage, applicable validation, current validity and scientific permission.
+Separate four operations: first full validation; subsequent identity/current-guard
+checks; revalidation of changed or affected scope; and final collection acceptance.
+
+A reusable validation receipt binds exact input/output content versions and scope,
+source/dependency and scientific configuration identities, model/actual provider,
+replicate, validator version/rules, accepted parent versions and coverage, and a
+completed successful semantic verdict. Bind the authoritative mechanism for
+observing revocation, replacement and generation changes. A process exit, digest
+cache hit or old PASS string is not that receipt. Keep the receipt in existing
+native evidence; no new validation service or parallel ledger is required.
+
+Within one frozen validation context, fully validate each unique immutable
+dependency at most once and reuse only completed proofs. Key by content identity
+and validation context, not path. Still check every reference edge, parent/provider
+binding, membership, uniqueness and coupling constraint. Keep computation lineage,
+accepted-result proof dependencies and failed-attempt audit history distinct:
+retaining every attempt does not make every historical attempt a recursive input
+to each consumer. Detect cycles/in-progress proofs and concurrent changes; they
+must not become successful cache entries. Count unique dependencies, edge checks
+and repeat visits; do not infer a universal complexity bound from memoization.
+
+Across processes, reuse requires verifiable retained receipts and content identity,
+validator/context applicability and a functioning current invalidation mechanism.
+An immutable store may establish byte identity without rereading all payloads;
+ordinary mutable files require a trustworthy current content check or a verified
+immutable snapshot. Same path, size, mtime or inode alone is insufficient. If
+these guarantees are unavailable, perform the necessary scoped validation and
+report the cost/limit; never silently enable a weaker persistent cache.
+
+Live guards stay live: authorization, accepted-generation/replacement necessity,
+active writers, availability, provider failure/quota evidence and revocations
+cannot be memoized as immutable facts. Recheck at dispatch and acceptance using
+the existing fencing contract. Newly accepted results can remove the need to
+retry even when old payload digests are unchanged.
+
+Changed content, parents, relevant source/configuration, actual provider or validator
+applicability invalidates the affected proof or requires an explicit equivalence
+assessment; preserve unrelated valid proofs and propagate revocation to descendants.
+Failed, partial or interrupted validation never produces a reusable PASS. A
+scientific definition change may also require a new study/analysis revision.
+
+Final acceptance remains a full scientific oracle over the frozen collection:
+required membership/uniqueness, conditions/replicates, actual completed outputs,
+parents/provider, ground truth/category bindings where applicable, component and
+aggregate metrics, and unresolved failures. It may compose applicable validated
+subproofs while checking all collection relations and current validity. Complete
+coverage does not require recomputing every established subproof; changed
+membership or rules invalidate the affected collection verdict. File counts or
+exit zero never replace this oracle.
 
 Examples:
 
@@ -262,11 +310,17 @@ checks and fail-closed admission. Do not create a PAC-wide scheduler, polling
 daemon or mirrored job database. A small project adapter may bridge a real gap
 only when implementation is in scope and its behavior is verified.
 
+If execute performs the same complete preflight before any external computation,
+omit a duplicate standalone plan-only run unless a required approval actually
+depends on the generated plan. Preserve exact code/configuration review, live
+guards and generated-output readback. A changed approval sequence requires its
+normal authority; never claim that an unperformed plan review preceded API work.
+
 ## Parallelism that respects science and scarce resources
 
-Use the mandatory per-artifact handoff and adapter contract in
-[artifact concurrency](artifact-concurrency.md). Trace the real code into one
-versioned computation DAG: each node accepts named inputs and returns named
+Use the validated handoff and adapter contract at the chosen commit boundary in
+[artifact concurrency](artifact-concurrency.md). Trace the relevant real code using
+existing versioned dependency records: each node accepts named inputs and returns named
 outputs; each edge binds an exact committed artifact version to an input port.
 An artifact-only drawing is an optional projection, not a second authoritative
 graph. A validated durable output commit releases its consumers immediately.
@@ -274,14 +328,16 @@ Do not delay release until other items, a shard, a dataset
 or an unrelated operation completes. Dispatch still requires resource, quota, storage and
 monitoring admission; dependency readiness is not an allocation.
 
-Use the smallest useful independently committable unit: a frame/entity result,
-tool receipt, iteration decision, partition, or genuinely coupled checkpoint.
-Too-small execution tasks can waste setup/I/O;
-too-large units delay error detection, downstream release and recovery. Measure
-the tradeoff on dev, including checkpoint/write/validation overhead and tail risk.
+Start with existing natural independently committable units, including batches
+and genuinely coupled checkpoints. Separate evidence, commit, execution and review
+granularity. Split only when reuse, isolation or overlap gains justify total
+dispatch, serialization, validation, storage, refactoring and review costs.
+Measure the tradeoff on representative dev, including recovery-history growth
+and checkpoint/write/validation overhead and tail risk.
 Computation batching must not become an artificial whole-dataset commit barrier.
-Where several independent items share a write container, expose separately
-committed readable item records as soon as each bounded write completes.
+Where independent items share a justified bounded batch commit, preserve exact
+record identities and lineage and expose them when that commit completes; separate
+per-record transactions are not required. Release consumers at that boundary.
 
 For each edge declare one of:
 
@@ -347,11 +403,20 @@ elapsed time for local freshness deadlines and reconcile cross-host timestamps.
 | --- | --- |
 | Crash/nonzero/provider failure | Exact execution event and bounded diagnostic logs; classify then bounded retry/stop |
 | Missing/duplicate IDs, bad shape/schema, NaN/Inf, wrong model/tokenizer | Validator result naming artifact and recipe; block consumption and invalidate impact |
-| Plausible but scientifically wrong output | Domain checks and stratified output samples; pause affected scope for diagnosis |
+| Plausible output violating data/model/implementation contract | Domain checks and stratified samples identify the defect; pause/invalidate affected scope, unlike a valid incorrect prediction |
 | No progress or stale output | Compare committed item/step progress with phase-aware threshold; logs alone do not prove progress |
 | RAM/VRAM/disk/thermal/budget threshold | Measured current/forecast pressure; stop admission, drain or terminate within budget |
 | Watcher or status authority stale | Fail-closed admission at freshness deadline; bounded native stop policy |
 | Unfavorable scientific metric | Preserve result; only invoke a predeclared scientific stopping/pruning rule |
+
+Distinguish a pressure warning, reduced new admission, bounded drain and immediate
+termination. A proxy such as CPU PSI alone does not establish an attributed health
+or resource breach; relate it to measured service health, limits and task impact.
+Honor the effective stop contract; revise unsuitable thresholds prospectively,
+never excuse a historical violation. Total wall-time budgets include preparation,
+computation, validation and finalization; verify native limit semantics before
+launch. Monitoring itself needs bounded reads/memory, not repeated whole-history
+JSONL loads. Reuse native supervision rather than build another monitoring layer.
 
 Bound expected wasted resources with a recorded engineering estimate:
 concurrent resource rate multiplied by detection plus cancellation delay, plus
@@ -367,6 +432,18 @@ identity-bound resource observations while running and final receipts on termina
 state, including failed executions. Missing telemetry is unknown with reason.
 
 ## Stop, invalidate and recover
+
+Classify root request failures, dependency-blocked descendants, valid incorrect
+predictions, account/provider failures and global resource faults separately.
+One root plus two blocked descendants is one root failure, not three API failures;
+completion order must not inflate the circuit-breaker count. Stop/recover only the
+proven affected scope; independent valid work continues within its budget and
+monitoring contract. Confirmed account exhaustion or systemic hazards still stop
+their full scope. A completed score-zero answer is retained, not retried to improve
+the score. Provider substitution requires the authorized rule and its specific
+evidence, preserves scientific inputs/settings and all attempts, and records the
+actual provider; a generic 400 or 429 alone does not establish image rejection
+or account exhaustion.
 
 1. Freeze affected admission immediately. For correctness/integrity failures also
    fence new consumption/acceptance of implicated artifacts.

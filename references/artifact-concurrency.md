@@ -19,20 +19,21 @@ The older local asyncio code is a tested behavioral fixture, not the project run
 
 ## Required pipeline map and handoff
 
-Before parallel execution, trace the actual producer/consumer code and persist
-one input-to-output computation DAG. A node is an independently executable
+Before parallel execution, trace the relevant producer/consumer code and use
+the project's existing dependency records for its computation DAG. A node is an independently executable
 callable with declared named inputs and outputs. An edge binds a producer output
 port's exact artifact version to a consumer input port. Scope artifacts by stable
 dataset/item/frame/entity/operation/iteration/output-port identities where relevant,
 plus condition, seed and recipe. Bind **all** required parents. Attach callable/
 source location, recipe identity, semantic validators, resource profile and output
-bounds to the node contract. Render the
-declared graph as an editable `.drawio` artifact. A generated graph is a view of
+bounds to the applicable native contract. A diagram is optional unless requested
+or needed to resolve dependency ambiguity; no new graph framework or `.drawio`
+file is a routine resume gate. A generated graph is a view of
 the supplied contract; it is not proof of automatic code dependency discovery.
 Verify it against real code, including hidden files, shared fitted state and API
 inputs. Fail readiness if those dependencies cannot be bound.
 
-For independently complete outputs, the mandatory default is **per-artifact durable handoff**:
+At the chosen commit boundary, require **validated durable handoff**:
 
 1. Execute the producer using only the declared exact parent versions.
 2. Close and validate the output payload; durably commit payload and manifest.
@@ -42,11 +43,11 @@ For independently complete outputs, the mandatory default is **per-artifact dura
 `s2(item A)` must not wait for `s1(item B)` or for a dataset/shard/stage-wide
 `gather`. `s3(A)` can run while `s1(B)` is still running. A flush at program exit,
 an in-memory Future, a log line, a partially written JSONL line or a directory
-listing does not satisfy the artifact commit. Inference microbatches may compute
-several items together, but must commit and release each independent completed
-item at that boundary; they do not justify waiting for the rest of the dataset.
-If per-item file overhead is material, use an append/transaction/object-store
-mechanism with separately committed item records and immediate readable receipts.
+listing does not satisfy the artifact commit. A justified bounded microbatch may
+commit several independently identified records together, with exact per-record
+lineage and a readable receipt for the batch. Release their consumers immediately
+after that commit; no per-record transaction is required. Batch completion does
+not justify waiting for the rest of an unrelated dataset.
 
 Separate two predicates: **dependency-ready** means all exact parents are valid
 and committed; **dispatchable** additionally means resources, quota, storage and
@@ -63,26 +64,24 @@ scratch are not an alternative retained experiment folder.
 
 ## Fine-grained boundaries and dynamic expansion
 
-There is no required stage layer. Trace the code from declared inputs to final
-outputs until expensive/reusable independently valid results have explicit
-ports. Prefer image detections, batched measurement receipts, entity geometry,
-verification proposals and per-iteration decisions over a single perceive/refine/
-reason task. A function call graph alone does not establish these dependencies.
+There is no required stage layer or universally preferred item/frame/entity task.
+Start with the project's natural work boundaries. Trace actual dependencies;
+a function call graph alone does not establish them. Keep four units separate:
 
-Keep three granularities separate:
+- **Logical evidence:** independently identified results and their lineage.
+- **Durable commit:** one validated publication, possibly with multiple records.
+- **Execution task:** a callable/batch may share setup or produce a coupled bundle.
+- **Human review:** a bounded rule/revision or final result, not each task instance.
 
-- **Artifact identity:** independently addressable, validated evidence units.
-- **Task execution:** a callable may fuse cheap transforms or atomically produce
-  a coupled output bundle; a completed bundle releases all its declared ports.
-- **API microbatch:** one request can produce many records. Preserve service
-  batching and scientific coupling; do not repeat one shared request per object.
-
-Prefer fine logical boundaries first, then measure dispatch/storage cost before
-fusing independent work. A mere directory/file per scalar is not the objective.
-For independent outputs produced at different times, split producers or use a
-verified native incremental commit facility: returning a dict only when the
-whole function ends cannot release its early keys. Multi-output bundle atomicity
-is appropriate only when those outputs share a genuine completion boundary.
+Preserve service microbatching; one request may produce many records without a
+request, file, worker or approval per record. Further split only when expected
+reuse, fault isolation or overlap benefits exceed dispatch, serialization,
+validation, storage, refactoring and review costs. A bounded batch commit may
+release its independently addressable records together. At the chosen boundary,
+do not withhold committed outputs behind an unrelated dataset-wide barrier.
+For material early-output delays, compare smaller batches with a verified native
+incremental commit facility; returning a dict at function end cannot release
+early keys. Preserve genuinely coupled output atomicity.
 
 Declare the graph in project code/config next to its producing code. Each node
 binding specifies callable/source revision, typed named inputs, output roles and
@@ -91,12 +90,13 @@ requirements, retry/replay rule and side effects/session owner. Ordinary functio
 need not register themselves or import an execution framework. The integration module submits
 them through the adapter; the native executor owns actual readiness/dispatch.
 
-Project adaptation is real engineering work: wrap existing pure functions without
-changing their algorithms; extract nested monolithic steps when intermediate
-results are otherwise hidden; replace implicit file handoffs and shared mutation
-with declared ports/state ownership. Merely wrapping three CLI programs does not
-expose their internal parallelism. Preserve existing semantics, evidence and
-fallback rules; scope project refactoring separately from editing this Skill.
+Project adaptation is separately scoped engineering work. Existing native
+dependencies and sufficient descriptions of the relevant path can satisfy this
+contract; routine resumption does not require extracting every nested function.
+Where a measured benefit or missing required guarantee justifies extraction,
+preserve algorithms, state ownership, evidence and fallback semantics. Wrapping
+CLI programs alone does not prove internal parallelism, but lack of that optional
+parallelism does not require an architecture migration.
 
 For runtime discovery, commit the decision and exact child membership before
 expansion. Derive stable child identities from parent decision version plus
@@ -123,8 +123,8 @@ change unless equivalence is demonstrated.
 
 ## Template, item instances and central dispatch
 
-First derive the complete project dependency graph from code; a repeated linear
-pipeline is only one special case. Separate task functions from their port
+Bind all dependencies of the selected execution using existing code and records;
+a repeated linear pipeline is only one special case. Separate task functions from their port
 bindings: a computation accepts named inputs and returns named outputs without
 looking up predecessor node IDs or calling successors. The framework resolves
 ports, loads committed input versions, validates/persists outputs and dispatches
@@ -204,8 +204,11 @@ devices. RPM/TPM need time-based admission, not just another worker-count cap.
 Unknown peaks require a bounded profiling run; do not launch all `n` blindly to
 discover an OOM limit. Where independent resources permit it, all `n` may run.
 
-Start a **bounded, matched end-to-end pilot at that admissible ceiling**, then
-compare lower candidates top-down. Record exact workloads, successful validated
+Reuse applicable measured capacity evidence first. If it is insufficient, choose
+a bounded representative pilot; the same canary can support correctness and
+capacity conclusions when both are actually observed. Top-down comparison from
+the admissible ceiling is an option for justified tuning, not a mandatory matrix
+for every resume. Record exact workloads, successful validated
 outputs, total elapsed time including retry/commit/drain, resource peaks and
 failure accounting. The reference probe explores a descending halving sequence
 with a fixed trial budget; it selects the best measured useful throughput, with a
@@ -320,7 +323,10 @@ Logical RAM/CPU amounts are admission accounting, not measured hard enforcement.
 Disk free-space reservations cover this owner's bounded writes, not unrelated
 writers or total retention forecasting. Existing valid evidence is never deleted.
 All unexpected node failures fail the local run and cancel cooperative siblings;
-unaffected committed artifacts remain eligible for validated restart reuse.
+this is a fixture limitation, not the production failure policy. A production
+adapter must distinguish root failures from dependency cascades and isolate the
+proven affected scope under [lifecycle](lifecycle.md), or report that it cannot.
+Unaffected committed artifacts remain eligible for validated restart reuse.
 
 It does not implement an independent watchdog, hard subprocess/GPU termination,
 live external revocation, cross-process API coordination, multi-host allocation,
