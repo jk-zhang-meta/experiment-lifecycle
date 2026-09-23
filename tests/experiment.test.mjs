@@ -90,7 +90,28 @@ function fixture() {
 
 function runDir(runPath) { return join(runPath, ".."); }
 
-function prepareRun(fx) {
+function canonicalJson(value) {
+  return JSON.stringify(value, function (key, child) {
+    return child && typeof child === "object" && !Array.isArray(child)
+      ? Object.fromEntries(Object.entries(child).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : child;
+  });
+}
+
+function freezeLegacyReceipt(prepared, bytes) {
+  // Synthetic v1 fixture: model the old bind's hash-only acceptance, then freeze.
+  // Never used on a real execution or to bypass the new bind command.
+  writeFileSync(prepared.receiptPath, bytes);
+  const bindingPath = join(prepared.dir, "EXECUTION.json");
+  const binding = JSON.parse(readFileSync(bindingPath, "utf8"));
+  const receipt = binding.receipts.find((entry) => entry.role === "resource");
+  receipt.digest = sha256(bytes);
+  receipt.bytes = Buffer.byteLength(bytes);
+  delete binding.recordDigest;
+  binding.recordDigest = sha256(canonicalJson(binding));
+  writeFileSync(bindingPath, JSON.stringify(binding, null, 2) + "\n");
+}
+
+function prepareRun(fx, resourceFields = {}) {
   const init = cli(["init", "--spec", fx.specPath, "--runtime-root", fx.runtime]);
   const runPath = init.run;
   const run = JSON.parse(readFileSync(runPath, "utf8"));
@@ -102,7 +123,7 @@ function prepareRun(fx) {
     observability: { tier: "C", gpu: "unobservable" },
     interval: { startedAt: "2026-01-01T00:00:00Z", endedAt: "2026-01-01T00:00:01Z", wallSeconds: 1 },
     cpu: { seconds: 0.1, peakRssBytes: 1000, readBytes: 1, writeBytes: 1 },
-    gpus: [], unobserved: ["gpu", "energy"],
+    gpus: [], unobserved: ["gpu", "energy"], ...resourceFields,
   }, null, 2)}\n`);
   writeFileSync(environmentReceiptPath, `${JSON.stringify({
     schemaVersion: 1, runManifestDigest: run.runManifestDigest, executionId: run.executionId,
@@ -257,6 +278,91 @@ test("seal and verify produce a tamper-evident VerifiedResult", () => {
   } finally { rmSync(fx.root, { recursive: true, force: true }); }
 });
 
+test("safe resource preflight survives bind, frozen seal and verify without byte changes", () => {
+  const fx = fixture();
+  try {
+    const prepared = prepareRun(fx, { sharedServices: {
+      credential_preflight: "matches resident service environment; no value or digest recorded",
+    } });
+    freezeLegacyReceipt(prepared, readFileSync(prepared.receiptPath));
+    const frozenPaths = [prepared.runPath, join(prepared.dir, "EXECUTION.json"), prepared.receiptPath];
+    const frozen = frozenPaths.map((path) => readFileSync(path));
+    const binding = JSON.parse(frozen[1]);
+    assert.equal(binding.receipts.find((r) => r.role === "resource").digest, sha256(frozen[2]));
+    assert.equal(cli(["seal", "--run", prepared.runPath, "--oracle-report", prepared.oraclePath]).status, "VerifiedResult");
+    assert.equal(cli(["verify-run", "--run", prepared.runPath]).state, "VerifiedResult");
+    frozenPaths.forEach((path, index) => assert.deepEqual(readFileSync(path), frozen[index]));
+    writeFileSync(prepared.receiptPath, Buffer.concat([frozen[2], Buffer.from(" ")]));
+    assert.equal(cli(["seal", "--run", prepared.runPath, "--oracle-report", prepared.oraclePath], 2).error.code, "RECEIPT_STALE");
+  } finally { rmSync(fx.root, { recursive: true, force: true }); }
+});
+
+test("bind rejects unsafe or invalid receipt content before freezing execution", () => {
+  const safeStatus = "matches resident service environment; no value or digest recorded";
+  const cases = [
+    ["resource", { sharedServices: { credential_preflight: "synthetic-secret-value" } }, "RECEIPT_INVALID"],
+    ["resource", { sharedServices: { credential_preflight: safeStatus + "; token=synthetic" } }, "RECEIPT_INVALID"],
+    ["resource", { sharedServices: { credential_preflight: { status: safeStatus, token: "synthetic" } } }, "RECEIPT_INVALID"],
+    ["resource", { sharedServices: { credential_preflight: true } }, "RECEIPT_INVALID"],
+    ["resource", { sharedServices: { credential_preflight: safeStatus, api_key: "synthetic" } }, "RECEIPT_INVALID"],
+    ["resource", { sharedServices: { credential_other: safeStatus } }, "RECEIPT_INVALID"],
+    ["resource", { credential_preflight: safeStatus }, "RECEIPT_INVALID"],
+    ["resource", { "sharedServices.credential_preflight": safeStatus }, "RECEIPT_INVALID"],
+    ["resource", { sharedServices: [{ credential_preflight: safeStatus }] }, "RECEIPT_INVALID"],
+    ["environment", { sharedServices: { credential_preflight: safeStatus } }, "RECEIPT_INVALID"],
+    ["resource", { executionId: "different-execution" }, "RECEIPT_MISMATCH"],
+    ["resource", { runManifestDigest: sha256("different-run") }, "RECEIPT_MISMATCH"],
+    ["resource", "{broken", "RECEIPT_INVALID"],
+    ["resource", "null", "RECEIPT_INVALID"],
+  ];
+  for (const [role, fields, code] of cases) {
+    const fx = fixture();
+    try {
+      const init = cli(["init", "--spec", fx.specPath, "--runtime-root", fx.runtime]);
+      const run = JSON.parse(readFileSync(init.run, "utf8"));
+      const receiptPath = join(runDir(init.run), "receipts", "candidate.json");
+      const bytes = typeof fields === "string" ? fields : JSON.stringify({
+        runManifestDigest: run.runManifestDigest, executionId: run.executionId, ...fields,
+      });
+      writeFileSync(receiptPath, bytes);
+      const rejected = cli(["bind", "--run", init.run, "--job-ref", "job-test",
+        "--executor-kind", "local", "--executor-target", "test-host",
+        "--receipt", `${role}=${receiptPath}`], 2);
+      assert.equal(rejected.error.code, code);
+      assert.equal(existsSync(join(runDir(init.run), "EXECUTION.json")), false);
+      assert.equal(readFileSync(receiptPath, "utf8"), bytes);
+    } finally { rmSync(fx.root, { recursive: true, force: true }); }
+  }
+});
+
+test("duplicate JSON keys cannot hide credential bytes at bind or legacy seal", () => {
+  const safe = JSON.stringify("matches resident service environment; no value or digest recorded");
+  const payloads = [
+    `"sharedServices":{"credential_preflight":"synthetic-secret","credential_preflight":${safe}}`,
+    `"sharedServices":{"api_key":"synthetic-secret"},"sharedServices":{"credential_preflight":${safe}}`,
+    `"sharedServices":{"credential_preflight":"synthetic-secret","credential_\\u0070reflight":${safe}}`,
+    `"sharedServices":{"api_key":"synthetic-secret"},"shared\\u0053ervices":{"credential_preflight":${safe}}`,
+  ];
+  for (const payload of payloads) {
+    const fx = fixture();
+    try {
+      const prepared = prepareRun(fx);
+      const bytes = `{"runManifestDigest":${JSON.stringify(prepared.run.runManifestDigest)},"executionId":${JSON.stringify(prepared.run.executionId)},${payload}}\n`;
+      freezeLegacyReceipt(prepared, bytes);
+      const frozen = [prepared.runPath, join(prepared.dir, "EXECUTION.json"), prepared.receiptPath]
+        .map((path) => [path, readFileSync(path)]);
+      assert.equal(cli(["seal", "--run", prepared.runPath, "--oracle-report", prepared.oraclePath], 2).error.code, "RECEIPT_INVALID");
+      for (const [path, original] of frozen) assert.deepEqual(readFileSync(path), original);
+      const retry = cli(["init", "--spec", fx.specPath, "--runtime-root", fx.runtime, "--retry-of", prepared.runPath]);
+      const retryRun = JSON.parse(readFileSync(retry.run, "utf8"));
+      const retryReceipt = join(runDir(retry.run), "receipts", "resource.json");
+      writeFileSync(retryReceipt, `{"runManifestDigest":${JSON.stringify(retryRun.runManifestDigest)},"executionId":${JSON.stringify(retryRun.executionId)},${payload}}`);
+      assert.equal(cli(["bind", "--run", retry.run, "--job-ref", "job-test", "--executor-kind", "local", "--executor-target", "test-host", "--receipt", `resource=${retryReceipt}`], 2).error.code, "RECEIPT_INVALID");
+      assert.equal(existsSync(join(runDir(retry.run), "EXECUTION.json")), false);
+    } finally { rmSync(fx.root, { recursive: true, force: true }); }
+  }
+});
+
 test("receipt mutation after bind and duplicate output paths are rejected", () => {
   const fx = fixture();
   try {
@@ -284,13 +390,9 @@ test("receipt mutation after bind and duplicate output paths are rejected", () =
       const environment3 = join(dir3, "receipts", "environment.json");
       writeFileSync(receipt3, `${JSON.stringify({ schemaVersion: 1 }, null, 2)}\n`);
       writeFileSync(environment3, `${JSON.stringify({ runManifestDigest: run3.runManifestDigest, executionId: run3.executionId, observed: {}, unobservable: ["all"] }, null, 2)}\n`);
-      cli(["bind", "--run", init3.run, "--job-ref", `job-${run3.executionId}`, "--executor-kind", "local", "--executor-target", "test-host", "--receipt", `resource=${receipt3}`, "--receipt", `environment=${environment3}`]);
-      writeFileSync(join(dir3, "outputs", "metrics.json"), '{"metric":0.9}\n');
-      writeFileSync(join(dir3, "outputs", "analysis.json"), '{"delta":0.1}\n');
-      const oracle3 = join(dir3, "oracle.json");
-      writeFileSync(oracle3, `${JSON.stringify({ schemaVersion: 1, status: "pass", runManifestDigest: run3.runManifestDigest, executionId: run3.executionId, terminalState: "succeeded" }, null, 2)}\n`);
-      const unbound = cli(["seal", "--run", init3.run, "--oracle-report", oracle3], 2);
+      const unbound = cli(["bind", "--run", init3.run, "--job-ref", `job-${run3.executionId}`, "--executor-kind", "local", "--executor-target", "test-host", "--receipt", `resource=${receipt3}`, "--receipt", `environment=${environment3}`], 2);
       assert.equal(unbound.error.code, "RECEIPT_UNBOUND");
+      assert.equal(existsSync(join(dir3, "EXECUTION.json")), false);
     } finally { rmSync(fx3.root, { recursive: true, force: true }); }
     const fx4 = fixture();
     try {

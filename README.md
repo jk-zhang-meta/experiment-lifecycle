@@ -117,6 +117,17 @@ requires every frozen matrix row to be completed and includes transitive shard
 evidence. New shard closures carry an explicit plan path; regenerate old
 closures before sealing. The helper accepts only clean, committed source
 snapshots and refuses `dirtyPatch` as unproven source identity.
+`bind` and `seal` use the same bounded receipt JSON, credential-field and
+run/execution identity checks; invalid receipts fail before `EXECUTION.json` is
+created. Duplicate JSON member names (including escape-equivalent keys) are
+rejected so parsing cannot hide credential bytes. For existing v1 resource receipts, exactly
+`sharedServices.credential_preflight` may contain the literal
+`matches resident service environment; no value or digest recorded`.
+This is a fixed status value, not a general `credential_*` exception: other
+values, objects, locations, roles and credential fields remain rejected. Compatible
+frozen receipts require no rewrite or rebind; their original byte digest/size and
+run/execution identity remain mandatory at seal. This compatibility does not
+change the oracle verdict or establish scientific/clinical quality.
 The integrated protocol can use equivalent project-native records; it does not
 force duplicate JSON records, an additional experiment-tracking service or
 another scheduler. GitHub collaboration records are required for research.

@@ -55,7 +55,8 @@ const DIMENSION_CLASSES = {
   analysis: "analysis",
   scientificCompute: "compute",
 };
-const SECRET_KEY_RE = /(?:^|[_-])(password|passwd|secret|api[_-]?key|access[_-]?token|private[_-]?key|credential)(?:$|[_-])/iu;
+const SECRET_KEY_RE = /(?:^|[_.-])(password|passwd|secret|api[_-]?key|access[_-]?token|private[_-]?key|credential)(?:$|[_.-])/iu;
+const SAFE_CREDENTIAL_PREFLIGHT = "matches resident service environment; no value or digest recorded";
 
 class ExperimentError extends Error {
   constructor(code, message, details = undefined) {
@@ -120,15 +121,20 @@ function safeText(value, label, max = 4096) {
   return value;
 }
 
-function assertNoSecrets(value, pathLabel = "spec") {
+function assertNoSecrets(value, pathLabel = "spec", receiptRole = null, fieldPath = []) {
   if (Array.isArray(value)) {
-    value.forEach((item, index) => assertNoSecrets(item, `${pathLabel}[${index}]`));
+    value.forEach((item, index) => assertNoSecrets(item, `${pathLabel}[${index}]`, receiptRole, [...fieldPath, index]));
     return;
   }
   if (!value || typeof value !== "object") return;
   for (const [key, child] of Object.entries(value)) {
-    if (SECRET_KEY_RE.test(key)) fail("SECRET_FIELD", `${pathLabel}.${key} looks like a credential field; store a source label/digest instead.`);
-    assertNoSecrets(child, `${pathLabel}.${key}`);
+    // Compatibility is a single status literal at one structural resource path,
+    // never permission to store credentials or arbitrary credential_* metadata.
+    const safePreflight = receiptRole === "resource" && fieldPath.length === 1
+      && fieldPath[0] === "sharedServices" && key === "credential_preflight"
+      && child === SAFE_CREDENTIAL_PREFLIGHT;
+    if (SECRET_KEY_RE.test(key) && !safePreflight) fail("SECRET_FIELD", `${pathLabel}.${key} looks like a credential field; store a source label/digest instead.`);
+    assertNoSecrets(child, `${pathLabel}.${key}`, receiptRole, [...fieldPath, key]);
   }
 }
 
@@ -246,14 +252,37 @@ function readBounded(target, label, maxBytes = MAX_JSON_BYTES) {
   return readFileSync(target, "utf8");
 }
 
-function readJson(target, label, maxBytes = MAX_JSON_BYTES) {
+function assertUniqueJsonKeys(text, label) {
+  // JSON syntax is already validated. Walk string/structure tokens so escaped
+  // duplicate keys cannot hide an earlier credential in the retained bytes.
+  const stack = [];
+  for (const [token] of text.matchAll(/"(?:\\.|[^"\\])*"|[{}\[\],:]/gu)) {
+    if (token === "{") stack.push({ keys: new Set(), keyExpected: true });
+    else if (token === "[") stack.push(null);
+    else if (token === "}" || token === "]") stack.pop();
+    else if (token === "," && stack.at(-1)) stack.at(-1).keyExpected = true;
+    else if (token.startsWith('"') && stack.at(-1)?.keyExpected) {
+      const object = stack.at(-1);
+      const key = JSON.parse(token);
+      if (object.keys.has(key)) fail("JSON_INVALID", `${label} contains a duplicate JSON object member.`);
+      object.keys.add(key);
+      object.keyExpected = false;
+    }
+  }
+}
+
+function readJson(target, label, maxBytes = MAX_JSON_BYTES, receiptRole = null) {
   let value;
-  try { value = JSON.parse(readBounded(target, label, maxBytes)); }
+  try {
+    const text = readBounded(target, label, maxBytes);
+    value = JSON.parse(text);
+    if (receiptRole !== null) assertUniqueJsonKeys(text, label);
+  }
   catch (error) {
     if (error instanceof ExperimentError) throw error;
     fail("JSON_INVALID", `${label} is not valid JSON: ${error.message}`);
   }
-  assertNoSecrets(value, label);
+  assertNoSecrets(value, label, receiptRole);
   return value;
 }
 
@@ -986,6 +1015,8 @@ function bindCommand(options) {
     receiptRoles.add(receipt.role);
     receiptPaths.add(receipt.path);
   }
+  // Validate the same bytes/content/identity contract before freezing EXECUTION.
+  for (const receipt of receipts) verifyBoundReceipt(receipt, run, runPath);
   const binding = {
     schemaVersion: SCHEMA_VERSION, kind: "pac-experiment-execution", projectId: run.projectId,
     experimentId: run.experimentId, semanticAttemptId: run.semanticAttemptId, executionId,
@@ -1024,8 +1055,11 @@ function verifyBoundReceipt(receipt, run, runPath) {
     fail("RECEIPT_STALE", `${receipt.role} receipt changed after binding.`);
   }
   let value;
-  try { value = readJson(target, `receipt ${receipt.role}`); }
+  try { value = readJson(target, `receipt ${receipt.role}`, MAX_JSON_BYTES, receipt.role); }
   catch (error) { fail("RECEIPT_INVALID", `${receipt.role} receipt must be bounded JSON: ${error.message}`); }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    fail("RECEIPT_INVALID", `${receipt.role} receipt must be a JSON object.`);
+  }
   if (value.runManifestDigest == null || value.executionId == null) {
     fail("RECEIPT_UNBOUND", `${receipt.role} receipt must declare runManifestDigest and executionId.`);
   }
