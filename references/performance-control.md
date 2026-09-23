@@ -35,9 +35,11 @@ intervals. Missing autoscaling does not itself mean missing safe monitoring.
 ## Performance contract
 
 For item/shard/API work, apply [executable artifact concurrency](artifact-concurrency.md)
-alongside this contract. Release consumers at the chosen durable commit boundary,
-including a justified bounded batch with exact record identities; do not add an
-unrelated whole-stage barrier. Native executor and quota mechanisms make dispatch/API
+alongside this contract. Immediately retain each completed dataset record regardless
+of computation batch/shard size; measure result-ready-to-durable-ack latency and
+pending write bytes. Do not defer writes to a count/timer/shard-end trigger to improve
+throughput. Release consumers after applicable acceptance without an unrelated
+whole-stage barrier. Native executor and quota mechanisms make dispatch/API
 decisions in code; the local single-process fixture is not distributed enforcement.
 
 Before an expensive scale-up, persist the following in the existing run plan or

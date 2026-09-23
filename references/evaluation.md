@@ -296,10 +296,10 @@ cases and record them as unrun; do not launch a demo or study to complete a chec
 
 | ID | Scenario | Required behavior |
 | --- | --- | --- |
-| A13 | One image/object is complete at the chosen commit boundary inside a still-running stage | Commit and release its consumer; stage names impose no barrier; task and evidence granularities need not coincide |
+| A13 | One independent image/object result completes inside a still-running shard or unsharded loop | Immediately persist its exact intermediate record without waiting for peers; validate/accept and release eligible consumers separately; verify readback before the shard/loop ends |
 | A14 | Detector discovers entities while another image is slow | Commit exact discovered membership, expand stable child IDs without a whole-discovery gather; bound pending tasks/bytes |
 | A15 | Node computes before its output is durable | Task result exposed to dependents only after accepted commit; no raw value Future bypass |
-| A16 | Two coupled named outputs versus independent early outputs | Preserve coupled atomicity; compare natural batching/incremental commit/splitting against total costs; release committed outputs without unrelated barriers |
+| A16 | Two coupled named outputs versus independent early outputs | Preserve coupled scientific acceptance, but retain each available raw result immediately; persist independent completed records without waiting for the coupled collection, batch or shard |
 | A17 | Retry/worker loss after a stochastic API effect | Reconcile exact retained attempt/provider identity; retries=0 alone does not prove no replay or exactly-once effects |
 | A18 | Worker scratch vanishes / graph driver restarts | Recover from native accepted manifests, exact expansion receipts and storage mapping, not runtime object keys or worker folders |
 | A19 | Many workers instantiate a process-local API governor | Reject multiplied quota design; use a shared controller or explicit enforceable partition |
@@ -307,8 +307,12 @@ cases and record them as unrun; do not launch a demo or study to complete a chec
 | A21 | New framework emits a second results tree | Bind existing study/trial/execution staging, outputs and logs; one artifact authority and exact collection references |
 | A22 | Dagster dynamic generator yields an early item | Verify actual mapped-consumer release with chosen executor; do not assume yield is a streaming scheduling boundary |
 | A23 | Existing executor already meets the contract | Reuse it; no forced ClearML/Ray migration or stacked schedulers |
-| A24 | Tiny artifacts make scheduling/storage dominate | Preserve required identity/lineage at natural work boundaries; justify any finer split by total benefit/cost; do not repeat shared batched API work per object |
-| A25 | Existing executor atomically commits a justified bounded batch of 20 independent records with exact identities/lineage | Accept that commit boundary and release all eligible consumers after commit; no forced per-record transaction, file, task or review; no later unrelated dataset barrier |
+| A24 | Tiny artifacts make scheduling/storage dominate | Reuse a shared intermediate file/native writer while retaining immediate per-record durability; no forced task/request/file/review per item, and no waiting for a flush timer, size threshold or batch end |
+| A25 | Twenty records finish at different times; executor writes only after all twenty finish | Reject readiness even if the batch is bounded; each completed record must already be durably readable before unfinished peers complete; final batch export may follow |
+| A26 | Same workload runs unsharded, then with several shard sizes; one record is slow | Every completed record appears in retained intermediate files while the slow record is still running in all variants; persist at completion, not shard return or whole-loop gather |
+| A27 | Kill the worker after record A's durable-write acknowledgement while its shard remains unfinished; restart | Read back exact A with attempt/input identity and validity state; reuse it when valid without another API call; reject torn/unacknowledged records and preserve attempts |
+| A28 | Writer fails, disk fills, or only background enqueue/logging succeeds | Do not acknowledge record durability or successful completion; stop affected admission, retain recoverable evidence and report the write failure; a queue receipt is not a durable receipt |
+| A29 | One indivisible provider call returns twenty results together; semantic validation is slow | Persist returned raw records immediately without waiting for another call or semantic validation; one atomic write of already available records is allowed; unvalidated bytes cannot release scientific consumers |
 
 ### ClearML-first selection and handoff cases (execution deferred)
 

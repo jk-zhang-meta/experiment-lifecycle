@@ -67,6 +67,30 @@ Artifact physical states are staging, committed or incomplete. Scientific use
 states are unvalidated, valid or revoked. An artifact can remain durably committed
 while revoked; preservation and scientific acceptance are different decisions.
 
+For dataset work, completion of each independent record triggers immediate durable
+retention of its raw result in intermediate files, before expensive semantic
+validation or final aggregation. This applies inside every shard, batch and
+unsharded loop. Never wait for another record, shard/task return, a record-count
+threshold, periodic flush or process exit. A single indivisible provider response
+may expose several records simultaneously; persist those available records at once,
+without waiting for future results. True coupled scientific acceptance can wait
+for its declared members; retention of already available raw evidence cannot.
+
+Bind this completion path to the existing artifact store: record exact input/item,
+condition, attempt/generation and raw payload identity, with unvalidated/valid/failed
+state as appropriate. Persist terminal error records too; never turn missing or
+failed results into successes. A per-record file or a safely serialized append to
+a shared intermediate file is acceptable; one task/request/file/review per record
+is not required. Require a complete recoverable record and the store's durability
+acknowledgement before marking it persisted or releasing its in-memory copy. A
+buffered write, asynchronous enqueue or log message is insufficient. Use required
+file/directory sync and atomic publication, or the equivalent acknowledged immutable
+object operation; preserve exact record recovery even if the enclosing shard dies.
+Bound write latency and pending bytes, apply backpressure, and fail affected
+admission on write failure; do not accumulate results until a batch-size/timer
+trigger. Raw retained bytes remain ineligible for scientific consumption until
+their applicable validation and live acceptance guards pass.
+
 ClearML Task completion, an enqueued background artifact upload and Ray ObjectRef
 availability do not establish this commit. ClearML ordinary artifact names may
 be overwritten; use immutable physical attempt identities and accepted manifests.
@@ -85,7 +109,8 @@ refs, loads inputs, validates output, writes bytes, commits manifests and routes
 successors; node code does not discover predecessor folders, glob raw outputs or
 commit an unrelated consumer's state.
 
-After completing a logical partition or checkpoint it closes the files, verifies
+Per-record retention occurs before partition closure. After completing a logical
+partition or checkpoint it closes the files, verifies
 bytes/schema/coverage/domain checks, and commits an immutable manifest binding
 all members. A complete committed partition is independent of the still-running
 producer only if its contract declares that no future producer action changes
@@ -328,16 +353,18 @@ Do not delay release until other items, a shard, a dataset
 or an unrelated operation completes. Dispatch still requires resource, quota, storage and
 monitoring admission; dependency readiness is not an allocation.
 
-Start with existing natural independently committable units, including batches
-and genuinely coupled checkpoints. Separate evidence, commit, execution and review
+Start with existing natural execution units, including batches and genuinely
+coupled checkpoints, while retaining available records immediately. Separate evidence,
+retention, scientific acceptance, execution and review
 granularity. Split only when reuse, isolation or overlap gains justify total
 dispatch, serialization, validation, storage, refactoring and review costs.
 Measure the tradeoff on representative dev, including recovery-history growth
 and checkpoint/write/validation overhead and tail risk.
 Computation batching must not become an artificial whole-dataset commit barrier.
-Where independent items share a justified bounded batch commit, preserve exact
-record identities and lineage and expose them when that commit completes; separate
-per-record transactions are not required. Release consumers at that boundary.
+Every independent completed item is durably retained immediately under section 2,
+even while its shard is unfinished. Batch/partition manifests and final exports
+may be assembled from these retained records later; they cannot be the first
+persistent copy. Release each consumer when its actual acceptance contract passes.
 
 For each edge declare one of:
 

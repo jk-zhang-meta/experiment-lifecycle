@@ -33,21 +33,24 @@ the supplied contract; it is not proof of automatic code dependency discovery.
 Verify it against real code, including hidden files, shared fitted state and API
 inputs. Fail readiness if those dependencies cannot be bound.
 
-At the chosen commit boundary, require **validated durable handoff**:
+Require immediate per-record retention and **validated durable handoff**:
 
 1. Execute the producer using only the declared exact parent versions.
-2. Close and validate the output payload; durably commit payload and manifest.
+2. Immediately persist each completed record in retained intermediate files,
+   independent of task/shard boundaries; follow the lifecycle's durability
+   acknowledgement contract. Validate and accept it before scientific consumption.
 3. Immediately release that artifact's successor edges to the executor's ready pool.
 4. Dispatch ready work whenever all its resource and quota gates permit it.
 
 `s2(item A)` must not wait for `s1(item B)` or for a dataset/shard/stage-wide
 `gather`. `s3(A)` can run while `s1(B)` is still running. A flush at program exit,
 an in-memory Future, a log line, a partially written JSONL line or a directory
-listing does not satisfy the artifact commit. A justified bounded microbatch may
-commit several independently identified records together, with exact per-record
-lineage and a readable receipt for the batch. Release their consumers immediately
-after that commit; no per-record transaction is required. Batch completion does
-not justify waiting for the rest of an unrelated dataset.
+listing does not satisfy the artifact commit. A bounded microbatch is not an
+exception: never retain an available completed record only in memory while peers
+finish. A single indivisible provider response may deliver several records at
+once; immediately persist those already available records, with exact per-record
+identity and lineage, without waiting for another response. Release consumers
+after applicable validation/acceptance; final batch exports are separate.
 
 Separate two predicates: **dependency-ready** means all exact parents are valid
 and committed; **dispatchable** additionally means resources, quota, storage and
@@ -69,19 +72,22 @@ Start with the project's natural work boundaries. Trace actual dependencies;
 a function call graph alone does not establish them. Keep four units separate:
 
 - **Logical evidence:** independently identified results and their lineage.
-- **Durable commit:** one validated publication, possibly with multiple records.
+- **Durable retention:** each completed record immediately recoverable; scientific
+  validation/acceptance is a separate state, never inferred from file presence.
 - **Execution task:** a callable/batch may share setup or produce a coupled bundle.
 - **Human review:** a bounded rule/revision or final result, not each task instance.
 
 Preserve service microbatching; one request may produce many records without a
-request, file, worker or approval per record. Further split only when expected
-reuse, fault isolation or overlap benefits exceed dispatch, serialization,
-validation, storage, refactoring and review costs. A bounded batch commit may
-release its independently addressable records together. At the chosen boundary,
-do not withhold committed outputs behind an unrelated dataset-wide barrier.
-For material early-output delays, compare smaller batches with a verified native
-incremental commit facility; returning a dict at function end cannot release
-early keys. Preserve genuinely coupled output atomicity.
+request, file, worker or approval per record. A shared intermediate file is valid
+only with immediate durable per-record publication and safe writer ownership.
+Further split execution tasks only when expected reuse, fault isolation or overlap
+benefits exceed dispatch, serialization, validation, storage, refactoring and review
+costs. These tradeoffs never waive per-record persistence. Bind a native incremental
+writer/completion callback inside each shard or unsharded loop; returning a dict
+only at function end cannot retain early records. Where no such binding exists,
+report the gap and fail launch readiness until implemented and verified within
+authorized scope. Preserve genuinely coupled scientific acceptance without delaying
+retention of available raw evidence.
 
 Declare the graph in project code/config next to its producing code. Each node
 binding specifies callable/source revision, typed named inputs, output roles and
@@ -171,7 +177,7 @@ reference is not an unbounded stream implementation.
 
 | Control | Unit | Decision |
 | --- | --- | --- |
-| Partition/microbatch size | Items per execution/commit boundary | Measure overhead, semantics, tail memory and downstream release latency |
+| Partition/microbatch size | Items per execution/aggregation boundary | Measure overhead, semantics, tail memory and release latency; never defer available per-record writes |
 | In-flight artifact work | Ready producer tasks across all datasets | Fill resource-feasible slots continuously; bound pending metadata and bytes |
 | API concurrency and rate | Requests for a real provider quota scope | Shared in-flight ceiling plus request/time and token/time limits |
 
@@ -314,6 +320,16 @@ readiness, no release after validator failure/partial writes, shared aggregate
 resource/API limits, cancellation cleanup, bounded retries, corruption rejection,
 recipe-sensitive restart reuse and all-input final coverage. Test an actual
 adapter with its storage/provider before claiming the same guarantees there.
+
+Before declaring dataset execution ready, inspect the real completion-to-writer
+path and verify per-record retention with a bounded local/fake-provider probe:
+keep a slow peer running, read completed records from retained intermediate files,
+then kill/restart after a durable acknowledgement and recover those exact records
+without recomputing valid results. Exercise sharded and unsharded paths, partial
+writes and writer failure. Record result-ready, durable-ack and shard-end ordering.
+A final file produced after normal exit does not pass. Missing implementation or
+unrun adapter evidence remains a readiness gap; a prose rule or fixture pass cannot
+substitute for it. Probes still require normal task authority.
 
 The reference is deliberately bounded: a finite declared DAG, one cooperative
 event loop and one owner of a trusted local artifact root. Payloads are bounded

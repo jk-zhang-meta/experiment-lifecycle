@@ -49,8 +49,12 @@ Separate logical evidence, durable commit, execution task and human review units
 they need not map one-to-one. Split further only when expected reuse, failure
 isolation or overlap benefits justify dispatch, validation, storage, refactoring
 and review costs. Routine resumption does not require an architecture migration
-or a new diagram. Bind exact input/output dependencies, commit complete outputs
-at the chosen boundary and release their consumers without unrelated barriers.
+or a new diagram. For dataset work, each independently completed record must
+immediately become durable in retained intermediate files, whether execution is
+sharded, batched or unsharded. Never wait for peers, shard/batch completion, a
+flush timer or final export. Persist raw results before expensive semantic checks;
+durable retention alone does not imply scientific acceptance. Bind exact
+input/output dependencies and release consumers only after valid acceptance.
 Preserve genuine coupled computations and joins; runtime-discovered members
 expand from committed decisions, not an assumed fully static Python DAG.
 Read [artifact concurrency](references/artifact-concurrency.md), then bind it to

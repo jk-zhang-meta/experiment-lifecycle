@@ -59,8 +59,13 @@ native Pipeline, Ray Core or file-workflow execution selected by project needs.
 Compliant existing platforms remain supported; there is no mandatory migration.
 It does not implement a distributed autoscaler or claim measured speedups.
 Use existing natural work boundaries; logical evidence, commits, tasks and reviews
-need not map one-to-one. The lifecycle distinguishes first validation from safe
-reuse of applicable completed proofs, current guards and final collection acceptance.
+need not map one-to-one. Every independently completed dataset record must immediately be durable
+in retained intermediate files, with or without sharding; computation batching
+never permits waiting for shard/batch completion to write available results.
+Final manifests/exports and scientific acceptance remain separate. Real adapter
+readback and interrupted-shard recovery are required readiness evidence, not
+guarantees supplied by these documents. The lifecycle distinguishes first validation
+from safe reuse of completed proofs, current guards and final collection acceptance.
 Recovery should not recursively revalidate unchanged history or request approval
 for each instance of an already approved bounded rule. The
 [recovery regression cases](references/evaluation.md#recovery-cost-and-validation-proof-reuse-regressions)
