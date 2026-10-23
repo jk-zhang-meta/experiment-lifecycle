@@ -235,7 +235,9 @@ old callers, must only route here and contain no independent completion policy.
 
 ## Reusing immutable input bytes
 
-The bundled `scripts/reuse.mjs` creates and verifies read-only input symlinks. It never follows links for outputs and never makes a shared source writable. A symlink is only a space-saving reference; the executor must provide a read-only mount/ACL when write prevention is required.
+The bundled `scripts/reuse.mjs` creates input symlinks and verifies their target and digest. It reports `accessRequested: "read-only"` and `readOnlyEnforcement: "not-enforced"`; the executor must provide a read-only mount/ACL when write prevention is required. Original permissions are preserved, and manifest assertions are never treated as enforcement evidence.
+
+Hashing uses a 64 KiB buffer and preserves historical file/directory digests and manifest verification. Each hash defaults to 10,000 filesystem entries (including directories and the root), 10 GiB total file bytes, depth 64 (root depth 0), and 30 seconds of cooperative elapsed checks. Override per invocation with positive integer `REUSE_MAX_ENTRIES`, `REUSE_MAX_BYTES`, or `REUSE_MAX_MS`, or nonnegative `REUSE_MAX_DEPTH` (for example, `REUSE_MAX_BYTES=21474836480 node scripts/reuse.mjs ...`). Limits fail before creating a link; elapsed checks run between filesystem operations and cannot interrupt a blocked filesystem call. New output replaces the historical `access` assertion with `accessRequested`; historical manifests remain accepted.
 
 ```sh
 node scripts/reuse.mjs link-artifact /immutable/data inputs/data /run/exp

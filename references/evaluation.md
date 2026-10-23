@@ -105,7 +105,7 @@ The expected result is the observable action and evidence scope, not exact wordi
 
 | ID | Prompt/scenario | Required observable behavior |
 | --- | --- | --- |
-| R01 | Run the existing unit test for a one-line parser fix | Use the existing runner and stop at its relevant oracle; no scientific workflow/reference reads, study manifest or throughput tuning |
+| R01 | Run the existing unit test for a one-line parser fix | Do not select this Skill solely for the test; if explicitly invoked, use the existing runner and stop at its relevant oracle without scientific references, study manifests or throughput tuning |
 | R02 | Fix one failing integration test; the scoped suite passes | Retain command, code identity and result; no repeated testing without a new failure/change or unresolved concern |
 | R03 | Validate a representative subset before running all 100 planned scientific conditions | Read scientific-workflow.md and dev-validation.md before selection; preserve all required conditions and treat dev success only as a milestone |
 | R04 | Check whether this allowed GPU can load the selected model; do not start a study | Read gpu-execution.md; bound the probe to allowed resources, and do not demand a full-study hypothesis or launch training |

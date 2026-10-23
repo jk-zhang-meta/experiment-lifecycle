@@ -1,144 +1,94 @@
 ---
 name: experiment-lifecycle
-description: "Manage repository-based research experiments end to end through GitHub: goals, milestones, hypotheses, trial batches, code/config evolution, collaboration, bugs, decisions, verified results and archive closure. Use when starting, planning, delegating, resuming, comparing or completing research experiments, benchmarks, training, evaluation, ablations and sweeps. Also route ordinary software tests, representative dev validation and GPU capacity checks to proportional evidence lanes. Dev success never substitutes for full-study completion. Do not use for literature-only work or prose-only paper drafting."
+description: Manages repository research from planning through verified closure, including scientific code changes, representative dev validation, benchmarks, training, sweeps and GPU capacity checks. Use for research lifecycle or model execution work; not ordinary software tests, literature-only work or prose-only drafting.
 ---
 
 # Experiment lifecycle
 
-Use this Skill as the testing and experiment entrypoint. Choose the smallest
-applicable evidence scope before loading detailed references. An engineering
-pass proves implementation behavior; a dev pass proves only its declared
-coverage/readiness gate; a formal empirical claim requires the full study.
+Choose the task's evidence scope before reading references. An engineering pass
+proves implementation behavior; a dev pass proves only its declared readiness
+gate; a scientific claim requires the applicable study evidence.
 
-For research-project initialization/onboarding or experiment-related code/config
-changes, first use [project readiness](references/project-readiness.md) to map
-project bindings and assess change impact. Keep ordinary edits proportional;
-setup does not imply provisioning services or launching a study.
+## Choose the route
 
-For repository-based research, this is the required lifecycle entrypoint and
-GitHub is required from study planning through archive closure. Start with
-[research management](references/research-management.md) and
-[GitHub workflow](references/github-workflow.md), including when resuming,
-changing a hypothesis/configuration, triaging a blocker or reporting progress.
-Manage the goal and milestone decisions as well as the individual runs. Pure
-planning may produce drafts before GitHub writes are authorized; it must not
-claim registration or launch readiness. Ordinary software tests and isolated
-capacity checks do not require research Issues or Milestones.
-
-This Skill specifies behavior and evidence. The project executor enforces
-scheduling, monitoring and cancellation; the artifact store owns durable bytes.
-It does not install a scheduler, grant compute access, or make a prose instruction
-into an unattended watchdog. Use existing project facilities when they satisfy
-the contracts; filenames and tracking products are not scientific guarantees.
-Before assessing project support, wiring an integration or declaring launch
-readiness, read [project readiness](references/project-readiness.md). Separate
-specified requirements, concrete bindings, static evidence and runtime evidence;
-a code-only assessment never authorizes a probe or experiment.
-Keep one authority per fact: GitHub for collaborative planning and review,
-versioned contracts for scientific commitments, the executor for job state,
-and the artifact store for evidence. ClearML is the first-choice management
-platform for new research integrations: measurements, comparisons and artifact
-indexes link to those same study/trial/execution identities. It does not replace
-GitHub decisions or scientific acceptance. Preserve compliant existing platforms;
-ordinary engineering tests need no tracking server. Do not introduce a second
-scheduler or mirror ledger. GitHub usage does not authorize unspecified writes, publication,
-compute or data disclosure; bind the exact repository and authorized actions.
-
-Reuse the project's natural work boundaries and native dependency records.
-Separate logical evidence, durable commit, execution task and human review units;
-they need not map one-to-one. Split further only when expected reuse, failure
-isolation or overlap benefits justify dispatch, validation, storage, refactoring
-and review costs. Routine resumption does not require an architecture migration
-or a new diagram. For dataset work, each independently completed record must
-immediately become durable in retained intermediate files, whether execution is
-sharded, batched or unsharded. Never wait for peers, shard/batch completion, a
-flush timer or final export. Persist raw results before expensive semantic checks;
-durable retention alone does not imply scientific acceptance. Bind exact
-input/output dependencies and release consumers only after valid acceptance.
-Preserve genuine coupled computations and joins; runtime-discovered members
-expand from committed decisions, not an assumed fully static Python DAG.
-Read [artifact concurrency](references/artifact-concurrency.md), then bind it to
-the existing [artifact lifecycle](references/lifecycle.md) and
-[storage layout](references/storage-layout.md); do not create a separate framework
-results tree or evidence ledger.
-
-Distinguish first full validation, current identity/validity checks, affected-scope
-revalidation and final collection acceptance. Reuse applicable completed proofs
-under the [lifecycle contract](references/lifecycle.md); do not recursively rebuild
-unchanged history for each consumer. Measure preparation, recovery, validation
-and finalization as well as computation before scale-up. Approved bounded rules
-cover routine instances through programmatic guards, not per-item LLM approval;
-material changes and final acceptance retain their required review.
-
-Reuse a compliant project executor. For new integrations, prefer ClearML native
-Pipeline components when dependencies are known and task overhead is suitable;
-choose Ray Core for dynamic fine-grained Python execution or resident models,
-or Snakemake for file/command/HPC graphs. Select one executor for each computation
-DAG, never require stage boundaries. Read [framework selection](references/framework-selection.md)
-and [ClearML integration](references/clearml-integration.md) before wiring the
-management/execution boundary. Keep computation-only nodes, declared ports and
-project-owned validation/commit independent of the backend. Ray-to-ClearML node
-tracking and durable recovery require explicit project bindings; they are not
-automatic native integration. The executor owns task dependencies;
-the shared quota controller owns API admission. Futures and worker counts do not
-prove durable evidence or provider limits. Fill the measured envelope without
-fixed dataset groups or LLM decisions for each dispatch. The older asyncio
-reference remains a behavioral fixture, not a second project scheduler.
-
-## Choose the validation lane
-
-- **Ordinary software tests:** identify the behavior/change, use the project's
-  existing runner and smallest relevant unit/integration/end-to-end checks,
-  retain exact command/code identity, result and useful failure evidence, and
-  stop when the engineering oracle is met. Do not manufacture scientific
-  hypotheses, dataset splits, research manifests or GPU runs. Respect applicable
-  UI isolation and resource controls. The scientific references below are not
-  required for this lane.
-- **Dataset-based development or scientific claims:** before design, dev
-  selection or execution, read [scientific workflow](references/scientific-workflow.md)
-  in full after the research-management and GitHub references, then the applicable
-  contract references below. Preserve its complete
-  study, monitoring and retention requirements; a dev milestone never replaces
-  the requested full experiment.
-- **Model loading or GPU capacity only:** read [GPU execution](references/gpu-execution.md)
+- **Ordinary software tests:** this Skill is not required solely to run or explain
+  them. If already loaded or explicitly invoked, use the project's existing
+  runner and smallest relevant checks; retain command, code identity, result and
+  useful failure evidence, then stop at the engineering oracle. Do not load
+  scientific references or create study records. Applicable UI isolation and
+  resource controls still apply.
+- **GPU capacity or model loading only:** read [GPU execution](references/gpu-execution.md)
   before probing or placement. Bind device/model allowlists and resource budgets;
-  capacity evidence does not authorize a scientific study. If the task also
-  supports dataset-based dev or scientific claims, use the scientific lane.
-
-Use targeted test-first/debugging methods when requested or needed, without
-creating another lifecycle owner. Use available canonical-state, resource-guard,
-runtime-hygiene and project verification facilities only for applicable surfaces.
-A graph coordinator may manage durable dependencies; it must not impose a second
-completion rule or schedule individual GPU work against the project's executor.
-
-## Read what the task needs
-
-These contracts apply to the selected task scope, not every software test:
-
-- Before repository research planning, resumption, progress or closure:
+  capacity evidence does not authorize a scientific study.
+- **Repository research:** before planning, resumption, progress or closure, read
   [research management](references/research-management.md) and
-  [GitHub workflow](references/github-workflow.md).
-- When creating project records: [record templates](references/research-records.md).
-- Before multi-person/agent assignment, parallel work, shared review or handoff:
-  [collaboration](references/collaboration.md).
-- Before experiment design or dev selection: [study protocol](references/dev-validation.md).
-- Before remote execution, server directory setup, storage relocation or result reconciliation:
-  [server storage and GitHub alignment](references/storage-layout.md).
-- Before producing, consuming, reusing, recovering, or retaining research artifacts:
-  [artifact contract](references/lifecycle.md).
-- Before parallel, expensive, detached, or long experiment execution:
-  [execution and monitoring](references/lifecycle.md).
-- Before model loading, GPU capacity probing, placement or GPU scheduling:
-  [GPU execution](references/gpu-execution.md).
-- Before expensive scale-up or throughput/concurrency tuning:
-  [measured performance control](references/performance-control.md).
-- Before item/shard/API concurrency or delayed intermediate handoffs:
-  [executable artifact concurrency](references/artifact-concurrency.md).
-- Before choosing or wiring experiment-management and execution components:
-  [project readiness](references/project-readiness.md),
-  [framework selection](references/framework-selection.md) and, for the default
-  management platform, [ClearML integration](references/clearml-integration.md).
-- For current helper support and deployment boundaries:
-  [compatibility and migration](README.md).
-- For rationale and source limits: [research basis](references/research-basis.md).
-- For Skill/adaptor validation: [acceptance cases](references/evaluation.md).
+  [GitHub workflow](references/github-workflow.md). GitHub is required from study
+  planning through archive closure. Without write authority, produce drafts and
+  report the binding gap; do not claim registration or launch readiness.
+- **Dataset-based development or scientific claims:** use the research route,
+  then read [scientific workflow](references/scientific-workflow.md) in full and
+  [study protocol](references/dev-validation.md) before design, dev selection or
+  execution. A dev milestone never replaces the requested full study. GPU work
+  that also supports these claims must satisfy both applicable routes.
+
+For research initialization, onboarding or experiment-related code/config changes,
+first read [project readiness](references/project-readiness.md) to map bindings
+and assess scientific change impact. Behavior-preserving engineering work stays
+proportional; setup does not imply provisioning services or launching a study.
+
+## Shared boundaries
+
+Keep one authority per fact: GitHub for collaborative decisions, versioned
+contracts for scientific commitments, the executor for job state and the artifact
+store for durable evidence. Preserve compliant project facilities. ClearML is the
+first-choice management platform for new integrations; it does not replace
+scientific acceptance. Do not add a second scheduler or mirror ledger.
+
+Bind exact repository, compute and disclosure authority. A read-only assessment
+does not authorize edits or probes. Distinguish specified requirements, concrete
+bindings, static checks and runtime evidence; before assessing integration or
+claiming launch readiness, use [project readiness](references/project-readiness.md).
+This Skill specifies behavior; an installed helper or prose instruction does not
+establish an unattended watchdog, durable store or working backend integration.
+
+For dataset work, persist each independently completed record immediately in
+retained intermediate files, before expensive semantic checks. Never wait for
+peers, batch/shard completion, a flush timer or final export. Retention alone is
+not scientific acceptance: release consumers only after valid acceptance of their
+exact dependencies. Preserve genuine coupled computations and joins. Reuse
+natural project boundaries; further splitting must justify its full overhead.
+
+Reuse applicable completed proofs while checking current identity/validity and
+revalidating affected scope. Final collection acceptance remains separate. Measure
+preparation, recovery, validation and finalization as well as computation before
+scale-up. Approved bounded rules use programmatic guards, not per-item LLM
+approval; material changes and final acceptance retain their required review.
+
+## Load the relevant contract
+
+| Task | Required reference |
+| --- | --- |
+| Create research records | [Record templates](references/research-records.md) |
+| Delegate, share review or hand off research | [Collaboration](references/collaboration.md) |
+| Produce, consume, reuse, recover or retain research artifacts | [Artifact lifecycle](references/lifecycle.md) |
+| Remote execution, server setup, storage relocation or result reconciliation | [Storage layout](references/storage-layout.md) |
+| Parallel, expensive, detached or long execution | [Execution and monitoring](references/lifecycle.md#execution-and-monitoring) |
+| GPU loading, probing, placement or scheduling | [GPU execution](references/gpu-execution.md) |
+| Expensive scale-up or throughput/concurrency tuning | [Performance control](references/performance-control.md) |
+| Item/shard/API concurrency or delayed intermediate handoffs | [Artifact concurrency](references/artifact-concurrency.md), bound to the artifact lifecycle and storage layout |
+| Choose or wire management/execution components | [Project readiness](references/project-readiness.md), [framework selection](references/framework-selection.md) and the selected platform's integration contract; for ClearML, [ClearML integration](references/clearml-integration.md) |
+| Check bundled helper support or migrate | [Compatibility and migration](README.md) |
+| Review rationale and evidence limits | [Research basis](references/research-basis.md) |
+| Validate this Skill or an adapter | [Acceptance cases](references/evaluation.md) |
+
+Select one executor for each computation DAG. Framework selection owns the
+ClearML Pipeline/Ray/Snakemake decision and integration constraints; the older
+asyncio reference is a behavioral fixture, not a second project scheduler.
+The executor owns dependencies and cancellation; the shared quota controller
+owns API admission. Futures and worker counts do not prove durable evidence or
+provider limits. A graph coordinator must not duplicate these responsibilities
+or impose a second completion rule.
+
+Use engineering, canonical-state, resource and runtime controls only for their
+applicable surfaces. Reuse existing project records and evidence storage rather
+than introducing a parallel framework results tree.
