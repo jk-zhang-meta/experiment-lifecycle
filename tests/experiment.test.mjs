@@ -287,6 +287,11 @@ test("seal and verify produce a tamper-evident VerifiedResult", () => {
     assert.equal(sealed.status, "VerifiedResult");
     const verified = cli(["verify-run", "--run", prepared.runPath]);
     assert.equal(verified.state, "VerifiedResult");
+    // The output says what a v1 VerifiedResult does and does not establish.
+    for (const output of [sealed, verified]) {
+      assert.match(output.claimScope, /record integrity/);
+      assert.ok(output.notEstablished.includes("analysis closure"));
+    }
     assert.equal(verified.checks.experiment, "pass");
     assert.equal(verified.checks.attempt, "pass");
     const checkpointArtifact = join(prepared.dir, "checkpoints", "step-10.bin");
@@ -585,6 +590,13 @@ test("a failed directory sync is reported and keeps the published record", () =>
     const result = cliWithFault({ PAC_TEST_DIRECTORY_SYNC_ERROR: "EIO" }, checkpointArgs(prepared, failed, "eio"), 2);
     assert.equal(result.error.code, "DURABILITY_UNCONFIRMED");
     assert.equal(JSON.parse(readFileSync(failed, "utf8")).checkpointId, "eio");
+    // The step cannot be repeated over an immutable record; recovery confirms it instead.
+    assert.equal(cli(checkpointArgs(prepared, failed, "eio"), 2).error.code, "IMMUTABLE_EXISTS");
+    const stillFailing = cliWithFault({ PAC_TEST_DIRECTORY_SYNC_ERROR: "EIO" }, ["confirm-durability", "--record", failed], 2);
+    assert.equal(stillFailing.error.code, "DURABILITY_UNCONFIRMED");
+    const confirmed = cli(["confirm-durability", "--record", failed]);
+    assert.equal(confirmed.recordDigest, JSON.parse(readFileSync(failed, "utf8")).recordDigest);
+    assert.equal(cli(["confirm-durability", "--record", prepared.runPath]).action, "confirm-durability");
     // A filesystem that cannot synchronize directories at all is tolerated.
     const tolerated = join(prepared.dir, "checkpoints", "tolerated.json");
     const ok = cliWithFault({ PAC_TEST_DIRECTORY_SYNC_ERROR: "EINVAL" }, checkpointArgs(prepared, tolerated, "einval"));
@@ -602,6 +614,13 @@ test("a publication receipt requires the sealed outputs to be unchanged", () => 
     const receipt = join(prepared.dir, "publication.json");
     const recorded = cli(["record-publication", "--run", prepared.runPath, "--manifest", manifest, "--out", receipt]);
     assert.equal(recorded.action, "record-publication");
+    // A manifest must name this run and, when it names an index, this index.
+    const unnamed = join(fx.root, "unnamed-manifest.json");
+    writeFileSync(unnamed, `${JSON.stringify({ files: ["metrics.json"] })}\n`);
+    assert.equal(cli(["record-publication", "--run", prepared.runPath, "--manifest", unnamed, "--out", join(prepared.dir, "p-unnamed.json")], 2).error.code, "PUBLICATION_MISMATCH");
+    const otherIndex = join(fx.root, "other-index-manifest.json");
+    writeFileSync(otherIndex, `${JSON.stringify({ runId: prepared.run.executionId, outputIndexDigest: `sha256:${"0".repeat(64)}` })}\n`);
+    assert.equal(cli(["record-publication", "--run", prepared.runPath, "--manifest", otherIndex, "--out", join(prepared.dir, "p-index.json")], 2).error.code, "PUBLICATION_MISMATCH");
     writeFileSync(join(prepared.dir, "outputs", "metrics.json"), '{"metric":0.99}\n');
     const stale = join(prepared.dir, "publication-after-change.json");
     const refused = cli(["record-publication", "--run", prepared.runPath, "--manifest", manifest, "--out", stale], 2);

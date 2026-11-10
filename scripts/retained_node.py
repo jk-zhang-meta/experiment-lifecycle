@@ -43,6 +43,15 @@ class ArtifactStore(Protocol):
         """Retain success, atomically validate/commit ports, and return native refs."""
 
 
+class IncrementalArtifactStore(ArtifactStore, Protocol):
+    """A store that can retain completed records before the node finishes."""
+    def retain_record(self, attempt: NodeAttempt, record_key: str, payload: Any) -> Any:
+        """Durably retain one completed raw record; return its native acknowledgment."""
+
+    def validate_and_commit_retained_bundle(self, attempt: NodeAttempt, outputs: Mapping[str, Any], lineage: Sequence[Any], retained: Mapping[str, Any]) -> Mapping[str, Any]:
+        """Commit the ports over exactly the acknowledged records; return native refs."""
+
+
 class ArtifactStoreFactory(Protocol):
     """An importable, worker-serializable factory for the project's native store."""
     def __call__(self) -> ArtifactStore: ...
@@ -75,6 +84,46 @@ def execute_node(store_factory: ArtifactStoreFactory, attempt: NodeAttempt, func
     except BaseException as error:
         try:
             store.record_failed(attempt, {"type": type(error).__name__})
+        except BaseException as retention_error:
+            error.add_note("artifact failure record failed: " + type(retention_error).__name__)
+        raise
+
+
+def execute_incremental_node(store_factory: Callable[[], IncrementalArtifactStore], attempt: NodeAttempt, function: Callable[..., Any], input_references: Sequence[Any]) -> Mapping[str, Any]:
+    """Fence one attempt whose computation completes records one at a time.
+
+    ``function`` is a generator. Each ``(record_key, payload)`` it yields is
+    retained and acknowledged by the store before the next one is requested,
+    so records completed before a later failure survive it. Its return value
+    is the named output bundle, committed over the acknowledged records only.
+    A yield is not an acknowledgment: only ``retain_record`` returning is.
+    """
+    store = store_factory()
+    store.record_started(attempt)
+    retained: dict[str, Any] = {}
+    try:
+        records = function(*(_load(store, ref) for ref in input_references))
+        while True:
+            try:
+                emitted = next(records)
+            except StopIteration as finished:
+                outputs = finished.value
+                break
+            if not isinstance(emitted, tuple) or len(emitted) != 2 or not isinstance(emitted[0], str) or not emitted[0]:
+                raise TypeError("an incremental node yields (record_key, payload) with a non-empty string key")
+            record_key, payload = emitted
+            if record_key in retained:
+                raise ValueError("record keys must be unique within one node attempt")
+            retained[record_key] = store.retain_record(attempt, record_key, payload)
+        if not isinstance(outputs, dict) or set(outputs) != set(attempt.output_ports):
+            raise TypeError("node outputs must match the declared named output ports")
+        accepted = store.validate_and_commit_retained_bundle(attempt, outputs, input_references, dict(retained))
+        if set(accepted) != set(outputs):
+            raise ValueError("store returned refs for a different output bundle")
+        return {port: ArtifactRef(reference) for port, reference in accepted.items()}
+    except BaseException as error:
+        try:
+            store.record_failed(attempt, {"type": type(error).__name__, "retainedRecords": str(len(retained))})
         except BaseException as retention_error:
             error.add_note("artifact failure record failed: " + type(retention_error).__name__)
         raise

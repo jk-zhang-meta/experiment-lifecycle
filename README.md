@@ -85,7 +85,9 @@ durable filesystem/S3-compatible store; MinIO is not a required dependency.
 ClearML records do not replace GitHub research decisions or scientific closure.
 
 `scripts/retained_node.py` is the shared computation-only load/fence/validate/commit
-seam used by the illustrative ClearML/Ray bindings. The store
+seam used by the illustrative ClearML/Ray bindings. `execute_node` commits one
+bundle when the computation returns; `execute_incremental_node` has the store
+retain and acknowledge each completed record before the next is computed. The store
 implementation remains project-owned. It provides no scheduler, tracking service,
 distributed quota system or automatic recovery across service failures.
 

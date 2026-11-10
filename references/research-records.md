@@ -43,6 +43,10 @@ Amendment or invalidation links (preserve earlier decisions):
 ```markdown
 Goal / milestone acceptance / study ID and revision:
 Question / hypothesis / exploratory or confirmatory role:
+Confirmatory only (write not-applicable with a reason where one does not apply):
+  primary estimand / comparison family / selection history / independent unit /
+  paired or cluster structure / uncertainty method and assumptions /
+  multiplicity decision / scientific stop rule
 Frozen protocol locator and digest:
 Comparison basis: baseline, population/split, evaluator, metrics, uncertainty
 Expected conditions/replicates or bounded adaptive policy:

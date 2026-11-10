@@ -346,6 +346,24 @@ schema/metric/completeness checks. `seal` verifies that report and then writes
 `COMPLETE.json` last. A completion record references the output-index and
 validator digests; it is the only state that permits publication.
 
+`VerifiedResult` is a record-level statement about one execution: its identity
+and output digests are intact and the project oracle passed. It does not
+establish analysis closure, receipts produced after sealing, or a scientific
+conclusion; `seal` and `verify-run` say so in their `claimScope` and
+`notEstablished` output fields. A full study maps launch intent, terminal
+receipts, raw collection, analysis collection and final closure onto the
+project's native records.
+
+`record-publication` repeats the `verify-run` checks before it writes a
+receipt, so an output changed after sealing is refused as `OUTPUT_STALE`. The
+destination manifest must name the run in `runId` and, when it carries
+`outputIndexDigest`, the sealed index.
+
+If a write ends with `DURABILITY_UNCONFIRMED`, the record exists but its
+directory entry was not confirmed durable. Do not delete or rewrite it. When
+the filesystem is healthy, run `confirm-durability --record ABS`, which
+re-verifies the record's digest and synchronizes the file and its directory.
+
 ## Privacy and limits
 
 Manifests contain metadata, not credentials. Do not include environment dumps,

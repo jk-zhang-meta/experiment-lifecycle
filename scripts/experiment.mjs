@@ -377,7 +377,7 @@ function fsyncDirectory(directory) {
   const unconfirmed = (error) => fail(
     "DURABILITY_UNCONFIRMED",
     `The record was published but its directory could not be synchronized (${error.code || error.message}): ${directory}. `
-      + "Check the filesystem and the record before relying on it.",
+      + "Once the filesystem is healthy, run confirm-durability --record on it; do not delete or rewrite the record.",
   );
   let fd;
   try { fd = openSync(directory, "r"); }
@@ -1416,7 +1416,7 @@ function sealCommand(options) {
     resourceReceipts: receiptEntries,
     completedAt: new Date().toISOString(),
   });
-  process.stdout.write(JSON.stringify({ ok: true, action: "seal", status: "VerifiedResult", run: runPath, outputIndex: indexPath, complete: completePath, runManifestDigest: manifestDigest, outputCount: entries.length, summary }, null, 2) + "\n");
+  process.stdout.write(JSON.stringify({ ok: true, action: "seal", status: "VerifiedResult", ...VERIFIED_RESULT_SCOPE, run: runPath, outputIndex: indexPath, complete: completePath, runManifestDigest: manifestDigest, outputCount: entries.length, summary }, null, 2) + "\n");
 }
 
 function verifyIndex(runPath, run, index) {
@@ -1434,6 +1434,13 @@ function verifyIndex(runPath, run, index) {
     if (actual.sha256 !== normalizeDigest(entry.sha256, `indexed output ${rel}.sha256`) || actual.bytes !== entry.bytes || actual.kind !== entry.kind) fail("OUTPUT_STALE", `Indexed output changed: ${rel}`);
   }
 }
+
+// What a v1 VerifiedResult asserts, stated in the output so it is not read as
+// a finished study. These fields are informational; no record format changes.
+const VERIFIED_RESULT_SCOPE = Object.freeze({
+  claimScope: "record integrity and oracle verdict for one execution",
+  notEstablished: ["analysis closure", "receipts produced after sealing", "scientific conclusion"],
+});
 
 // Recomputes every identity and output digest of a run from current bytes.
 // verify-run prints the report; record-publication requires it to be a
@@ -1476,6 +1483,7 @@ function verifyRun(runPath) {
       fail("COMPLETE_INVALID", "Completion record does not match the bound execution and verified output index.");
     }
     report.checks.complete = "pass"; report.state = "VerifiedResult"; report.summary = complete.summary;
+    Object.assign(report, VERIFIED_RESULT_SCOPE);
   } else if (index) report.state = "terminal-awaiting-completion";
   return { report, run, index };
 }
@@ -1600,7 +1608,11 @@ function publicationCommand(options) {
   if (report.state !== "VerifiedResult") fail("NOT_VERIFIED", "Only a sealed VerifiedResult can be published.");
   const manifestPath = abs(options.manifest, "publication manifest");
   const manifest = readJson(manifestPath, "publication manifest");
-  if (manifest.runId != null && manifest.runId !== run.runId && manifest.runId !== run.executionId) fail("PUBLICATION_MISMATCH", "Published manifest names a different run.");
+  // The manifest must name this run; one that names none could be attached to
+  // any result.
+  if (typeof manifest.runId !== "string" || manifest.runId === "") fail("PUBLICATION_MISMATCH", "Published manifest does not name a run (runId).");
+  if (manifest.runId !== run.runId && manifest.runId !== run.executionId) fail("PUBLICATION_MISMATCH", "Published manifest names a different run.");
+  if (manifest.outputIndexDigest != null && manifest.outputIndexDigest !== index.recordDigest) fail("PUBLICATION_MISMATCH", "Published manifest names a different output index.");
   const manifestDigest = digestPath(manifestPath, "publication manifest").sha256;
   const out = abs(options.out, "publication receipt");
   if (isSynchronizedStorage(out)) fail("PUBLICATION_RECEIPT_STORAGE", "Publication receipt must remain in host-local runtime.");
@@ -1614,9 +1626,24 @@ function publicationCommand(options) {
   process.stdout.write(JSON.stringify({ ok: true, action: "record-publication", path: out, recordDigest: receipt.recordDigest }, null, 2) + "\n");
 }
 
+// Recovery for DURABILITY_UNCONFIRMED: the record already exists and is
+// immutable, so the step that wrote it cannot simply be repeated. Re-verify its
+// digest, then synchronize the file and its directory.
+function confirmDurabilityCommand(options) {
+  if (!options.record) fail("USAGE", "confirm-durability requires --record.");
+  const target = abs(options.record, "record");
+  requireFile(target, "record");
+  const digestFields = parse(target).base === "RUN.json" ? ["runManifestDigest", "recordDigest"] : ["recordDigest"];
+  const record = loadRecord(target, parse(target).base, digestFields);
+  const fd = openSync(target, "r");
+  try { fsyncSync(fd); } finally { closeSync(fd); }
+  fsyncDirectory(dirname(target));
+  process.stdout.write(JSON.stringify({ ok: true, action: "confirm-durability", path: target, recordDigest: record.recordDigest }, null, 2) + "\n");
+}
+
 function parseArgs(argv) {
   const positional = []; const options = { receipts: [] };
-  const valueOptions = new Set(["spec", "runtime-root", "retry-of", "compare-to", "run", "source-root", "job-ref", "executor-kind", "executor-target", "receipt", "oracle-report", "matrix-report", "shard-report", "left", "right", "manifest", "out", "artifact", "checkpoint-id", "step", "state", "parent", "output-index", "analysis-id", "method", "code-digest", "config-digest", "items", "plan", "shard-receipt", "shard-id", "worker-attempt-id", "endpoint", "item-manifest", "output", "rows", "terminal-state", "devices"]);
+  const valueOptions = new Set(["record", "spec", "runtime-root", "retry-of", "compare-to", "run", "source-root", "job-ref", "executor-kind", "executor-target", "receipt", "oracle-report", "matrix-report", "shard-report", "left", "right", "manifest", "out", "artifact", "checkpoint-id", "step", "state", "parent", "output-index", "analysis-id", "method", "code-digest", "config-digest", "items", "plan", "shard-receipt", "shard-id", "worker-attempt-id", "endpoint", "item-manifest", "output", "rows", "terminal-state", "devices"]);
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
     if (!token.startsWith("--")) { positional.push(token); continue; }
@@ -1647,6 +1674,7 @@ function help() {
     "  experiment.mjs record-shard --run RUN.json --plan ABS --out ABS --shard-id ID --worker-attempt-id ID --endpoint ID --item-manifest ABS --output ABS --rows N [--devices id,id]",
     "  experiment.mjs verify-shards --run RUN.json --plan ABS --shard-receipt ABS... --out ABS",
     "  experiment.mjs record-publication --run RUN.json --manifest MANIFEST.json --out ABS",
+    "  experiment.mjs confirm-durability --record ABS",
   ].join("\n");
 }
 
@@ -1665,6 +1693,7 @@ function main(argv) {
   else if (action === "record-shard") recordShardCommand(options);
   else if (action === "verify-shards") verifyShardsCommand(options);
   else if (action === "record-publication") publicationCommand(options);
+  else if (action === "confirm-durability") confirmDurabilityCommand(options);
   else fail("USAGE", `Unknown action: ${action}`);
   return 0;
 }

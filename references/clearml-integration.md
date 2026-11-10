@@ -48,6 +48,13 @@ containers are supported, raw leaves are rejected. Outputs must be a dictionary
 with exactly the declared ports. Coupled ports commit together; independent early
 outputs need separate completion boundaries.
 
+A node that completes many records in one task, where a late record may be slow
+or fail, uses `execute_incremental_node` instead. Its function is a generator
+yielding `(record_key, payload)`; the project store's `retain_record` makes each
+record durable and returns an acknowledgment before the next is requested, and
+`validate_and_commit_retained_bundle` closes the bundle over the acknowledged
+records only. A yield is not an acknowledgment.
+
 The helper delegates identity validation to the store. Its `record_started` must reject incomplete/empty preallocated
 identity fields and an empty or non-unique output-port contract before granting the fence.
 

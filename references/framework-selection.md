@@ -143,6 +143,24 @@ available parallelism; measured resource budgets and provider quotas determine
 admission. No candidate's documentation proves automatic globally optimal
 concurrency for an unknown experiment.
 
+## Private data: adapter checklist
+
+"Do not leak secrets" does not cover what a tracker or cache captures on its
+own. Before a private study uses a backend, the project adapter states:
+
+1. Which fields and libraries the tracker may capture automatically, how
+   configuration overrides are recorded, and that unrelated capture is off.
+2. That private raw logs and the redacted operational log that may be
+   synchronized are separate, with their own permissions and purpose.
+3. That exports to GitHub or the tracker's web service carry an allowlisted
+   summary, never a raw payload.
+4. That a shared artifact cache is disabled for private payloads, or that its
+   storage isolation and access control were verified.
+
+Sanitize before logging or egress; a later pattern search will not find every
+secret. Retaining evidence never requires retaining a secret, and existing
+evidence is not deleted without authorization.
+
 ## Current workspace evidence and remaining work
 
 The draft local fixture passes 32 Python checks, and the 26 existing Node helper
