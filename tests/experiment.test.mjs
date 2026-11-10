@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import {
-  cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync,
+  cpSync, existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const script = join(fileURLToPath(new URL("..", import.meta.url)), "scripts", "experiment.mjs");
@@ -109,6 +109,31 @@ function freezeLegacyReceipt(prepared, bytes) {
   delete binding.recordDigest;
   binding.recordDigest = sha256(canonicalJson(binding));
   writeFileSync(bindingPath, JSON.stringify(binding, null, 2) + "\n");
+}
+
+const faultPreload = join(dirname(fileURLToPath(import.meta.url)), "fault-preload.mjs");
+
+// Runs the CLI with an injected filesystem fault; returns the parsed result
+// or, for an expected failure, the parsed error envelope.
+function cliWithFault(env, args, expected = 0) {
+  try {
+    const output = execFileSync(process.execPath, ["--import", faultPreload, script, ...args], {
+      encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 8 * 1024 * 1024,
+      env: { ...process.env, ...env },
+    });
+    assert.equal(expected, 0, `expected CLI failure but it succeeded: ${output}`);
+    return JSON.parse(output);
+  } catch (error) {
+    if (expected === 0) throw error;
+    assert.equal(error.status, expected, `unexpected CLI exit: ${error.stderr || error.message}`);
+    return JSON.parse(String(error.stderr || "{}"));
+  }
+}
+
+function checkpointArgs(prepared, out, id) {
+  const artifact = join(prepared.dir, "checkpoints", `${id}.bin`);
+  writeFileSync(artifact, `${id}\n`);
+  return ["record-checkpoint", "--run", prepared.runPath, "--out", out, "--artifact", artifact, "--checkpoint-id", id, "--step", "10"];
 }
 
 function prepareRun(fx, resourceFields = {}) {
@@ -535,5 +560,52 @@ test("sealed shard evidence is transitive and portable", () => {
     const copy = join(fx.root, "portable");
     cpSync(fx.runtime, copy, { recursive: true });
     assert.equal(cli(["verify-run", "--run", join(copy, relative(fx.runtime, prepared.runPath))]).state, "VerifiedResult");
+  } finally { rmSync(fx.root, { recursive: true, force: true }); }
+});
+
+test("a writer that lost the existence race cannot replace a published record", () => {
+  const fx = fixture();
+  try {
+    const prepared = prepareRun(fx);
+    const out = join(prepared.dir, "checkpoints", "record.json");
+    cli(checkpointArgs(prepared, out, "first"));
+    const published = readFileSync(out, "utf8");
+    const lost = cliWithFault({ PAC_TEST_HIDE_EXISTING: out }, checkpointArgs(prepared, out, "second"), 2);
+    assert.equal(lost.error.code, "IMMUTABLE_EXISTS");
+    assert.equal(readFileSync(out, "utf8"), published);
+    assert.deepEqual(readdirSync(join(prepared.dir, "checkpoints")).filter((name) => name.includes(".partial-")), []);
+  } finally { rmSync(fx.root, { recursive: true, force: true }); }
+});
+
+test("a failed directory sync is reported and keeps the published record", () => {
+  const fx = fixture();
+  try {
+    const prepared = prepareRun(fx);
+    const failed = join(prepared.dir, "checkpoints", "failed.json");
+    const result = cliWithFault({ PAC_TEST_DIRECTORY_SYNC_ERROR: "EIO" }, checkpointArgs(prepared, failed, "eio"), 2);
+    assert.equal(result.error.code, "DURABILITY_UNCONFIRMED");
+    assert.equal(JSON.parse(readFileSync(failed, "utf8")).checkpointId, "eio");
+    // A filesystem that cannot synchronize directories at all is tolerated.
+    const tolerated = join(prepared.dir, "checkpoints", "tolerated.json");
+    const ok = cliWithFault({ PAC_TEST_DIRECTORY_SYNC_ERROR: "EINVAL" }, checkpointArgs(prepared, tolerated, "einval"));
+    assert.equal(ok.action, "record-checkpoint");
+  } finally { rmSync(fx.root, { recursive: true, force: true }); }
+});
+
+test("a publication receipt requires the sealed outputs to be unchanged", () => {
+  const fx = fixture();
+  try {
+    const prepared = prepareRun(fx);
+    cli(["seal", "--run", prepared.runPath, "--oracle-report", prepared.oraclePath]);
+    const manifest = join(fx.root, "destination-manifest.json");
+    writeFileSync(manifest, `${JSON.stringify({ runId: prepared.run.executionId, files: ["metrics.json"] })}\n`);
+    const receipt = join(prepared.dir, "publication.json");
+    const recorded = cli(["record-publication", "--run", prepared.runPath, "--manifest", manifest, "--out", receipt]);
+    assert.equal(recorded.action, "record-publication");
+    writeFileSync(join(prepared.dir, "outputs", "metrics.json"), '{"metric":0.99}\n');
+    const stale = join(prepared.dir, "publication-after-change.json");
+    const refused = cli(["record-publication", "--run", prepared.runPath, "--manifest", manifest, "--out", stale], 2);
+    assert.equal(refused.error.code, "OUTPUT_STALE");
+    assert.equal(existsSync(stale), false);
   } finally { rmSync(fx.root, { recursive: true, force: true }); }
 });

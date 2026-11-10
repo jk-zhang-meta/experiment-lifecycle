@@ -233,8 +233,9 @@ with `recordDigest` omitted. Important fields:
 ```
 
 `runManifestDigest` is the digest used by all downstream records. It is not a
-mutable status field. The helper writes to a temporary file, fsyncs it, renames
-it, and refuses to overwrite an existing record.
+mutable status field. The helper writes to a temporary file, fsyncs it, and
+links it into place, which fails when the record already exists; it then
+synchronizes the directory and reports a failure other than "unsupported".
 
 Execution-local `ANALYSIS.json` records bind an analysis method and code/config
 digests to the exact `output-index.json` digest. Checkpoint records bind a

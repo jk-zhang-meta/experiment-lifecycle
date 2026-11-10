@@ -8,8 +8,8 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import {
-  chmodSync, closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync,
-  opendirSync, readFileSync, readSync, realpathSync, renameSync, unlinkSync, writeFileSync,
+  chmodSync, closeSync, existsSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync,
+  opendirSync, readFileSync, readSync, realpathSync, unlinkSync, writeFileSync,
 } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { homedir, hostname, platform, release, arch } from "node:os";
@@ -365,11 +365,41 @@ function requireFileOrDirectory(target, label) {
   return stat;
 }
 
+// A directory cannot be opened or synchronized on some platforms and
+// filesystems. Only that case is tolerated: any other failure leaves the new
+// name's durability unconfirmed and must not be reported as success.
+const DIRECTORY_SYNC_UNSUPPORTED = new Set(["EINVAL", "ENOTSUP", "EOPNOTSUPP", "ENOSYS"]);
+const WINDOWS_DIRECTORY_HANDLE_REFUSED = new Set(["EISDIR", "EPERM", "EACCES"]);
+
 function fsyncDirectory(directory) {
-  try {
-    const fd = openSync(directory, "r");
-    try { fsyncSync(fd); } finally { closeSync(fd); }
-  } catch { /* Some filesystems do not permit directory fsync; record remains atomic. */ }
+  const unsupported = (error) => DIRECTORY_SYNC_UNSUPPORTED.has(error.code)
+    || (platform() === "win32" && WINDOWS_DIRECTORY_HANDLE_REFUSED.has(error.code));
+  const unconfirmed = (error) => fail(
+    "DURABILITY_UNCONFIRMED",
+    `The record was published but its directory could not be synchronized (${error.code || error.message}): ${directory}. `
+      + "Check the filesystem and the record before relying on it.",
+  );
+  let fd;
+  try { fd = openSync(directory, "r"); }
+  catch (error) { if (unsupported(error)) return; unconfirmed(error); }
+  try { fsyncSync(fd); }
+  catch (error) { if (!unsupported(error)) unconfirmed(error); }
+  finally { closeSync(fd); }
+}
+
+// link() fails when the name is already taken, so of two writers that both
+// passed the existence check only one publishes. rename() would let the second
+// silently replace the first writer's record.
+function publishWithoutReplace(temporary, target) {
+  try { linkSync(temporary, target); }
+  catch (error) {
+    if (error.code === "EEXIST") fail("IMMUTABLE_EXISTS", `Refusing to overwrite immutable record: ${target}`);
+    if (["EPERM", "ENOTSUP", "EOPNOTSUPP", "ENOSYS"].includes(error.code)) {
+      fail("IMMUTABLE_PUBLISH_UNSUPPORTED", `This filesystem cannot publish a record without replacement (hard links unavailable): ${target}`);
+    }
+    throw error;
+  }
+  unlinkSync(temporary);
 }
 
 function writeImmutableRecord(target, value, digestFields = ["recordDigest"]) {
@@ -390,12 +420,14 @@ function writeImmutableRecord(target, value, digestFields = ["recordDigest"]) {
     try { writeFileSync(fd, payload, { encoding: "utf8" }); fsyncSync(fd); }
     finally { closeSync(fd); }
     chmodSync(temporary, 0o600);
-    renameSync(temporary, target);
-    fsyncDirectory(parent);
+    publishWithoutReplace(temporary, target);
   } catch (error) {
-    try { if (existsSync(temporary)) unlinkSync(temporary); } catch { /* preserve the original failure */ }
+    try { unlinkSync(temporary); } catch { /* absent, or preserve the original failure */ }
     throw error;
   }
+  // Outside the cleanup above: a published record is never removed because
+  // its directory could not be synchronized.
+  fsyncDirectory(parent);
   return record;
 }
 
@@ -1403,9 +1435,10 @@ function verifyIndex(runPath, run, index) {
   }
 }
 
-function verifyRunCommand(options) {
-  if (!options.run) fail("USAGE", "verify-run requires --run.");
-  const runPath = pathFromRun(options.run);
+// Recomputes every identity and output digest of a run from current bytes.
+// verify-run prints the report; record-publication requires it to be a
+// VerifiedResult before it writes a receipt.
+function verifyRun(runPath) {
   const run = loadRecord(runPath, "RUN.json", ["runManifestDigest", "recordDigest"]);
   const manifestDigest = runManifestDigest(run);
   if (normalizeDigest(run.semantic?.fingerprint, "RUN semantic fingerprint") !== semanticFingerprintFromRun(run)) {
@@ -1444,6 +1477,12 @@ function verifyRunCommand(options) {
     }
     report.checks.complete = "pass"; report.state = "VerifiedResult"; report.summary = complete.summary;
   } else if (index) report.state = "terminal-awaiting-completion";
+  return { report, run, index };
+}
+
+function verifyRunCommand(options) {
+  if (!options.run) fail("USAGE", "verify-run requires --run.");
+  const { report } = verifyRun(pathFromRun(options.run));
   process.stdout.write(JSON.stringify(report, null, 2) + "\n");
 }
 
@@ -1555,11 +1594,10 @@ function recordAnalysisCommand(options) {
 function publicationCommand(options) {
   if (!options.run || !options.manifest || !options.out) fail("USAGE", "record-publication requires --run, --manifest, and --out.");
   const runPath = pathFromRun(options.run);
-  const run = loadRecord(runPath, "RUN.json", ["runManifestDigest", "recordDigest"]);
-  const completePath = findSibling(runPath, "COMPLETE.json");
-  if (!existsSync(completePath)) fail("NOT_VERIFIED", "Only a sealed VerifiedResult can be published.");
-  const complete = loadRecord(completePath, "COMPLETE.json");
-  if (complete.status !== "verified" || complete.runManifestDigest !== run.runManifestDigest) fail("NOT_VERIFIED", "Completion record is not verified for this run.");
+  // A receipt must describe the result as it is now, not as it was sealed:
+  // an output changed after sealing fails here with OUTPUT_STALE.
+  const { report, run, index } = verifyRun(runPath);
+  if (report.state !== "VerifiedResult") fail("NOT_VERIFIED", "Only a sealed VerifiedResult can be published.");
   const manifestPath = abs(options.manifest, "publication manifest");
   const manifest = readJson(manifestPath, "publication manifest");
   if (manifest.runId != null && manifest.runId !== run.runId && manifest.runId !== run.executionId) fail("PUBLICATION_MISMATCH", "Published manifest names a different run.");
@@ -1569,7 +1607,7 @@ function publicationCommand(options) {
   const receipt = writeImmutableRecord(out, {
     schemaVersion: SCHEMA_VERSION, kind: "pac-experiment-publication", projectId: run.projectId,
     experimentId: run.experimentId, semanticAttemptId: run.semanticAttemptId, executionId: run.executionId,
-    runManifestDigest: run.runManifestDigest, outputIndexDigest: complete.outputIndexDigest,
+    runManifestDigest: run.runManifestDigest, outputIndexDigest: index.recordDigest,
     destinationManifest: manifestPath, destinationManifestDigest: manifestDigest,
     publishedAt: new Date().toISOString(),
   });
