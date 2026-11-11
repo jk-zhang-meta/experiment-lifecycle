@@ -17,13 +17,20 @@ gate; a scientific claim requires the applicable study evidence.
   useful failure evidence, then stop at the engineering oracle. Do not load
   scientific references or create study records. Applicable UI isolation and
   resource controls still apply.
+- **Any run whose result you may look at again** (trying an idea, tuning, an
+  ablation, a baseline, a full study): launch it through the
+  [run ledger](references/run-ledger.md), so it is bound to an exact commit and
+  leaves a record. Exploration needs nothing more: no Issue, milestone or study
+  record until a result will be claimed, compared across methods or reported.
+  Then continue with the research route below.
 - **GPU capacity or model loading only:** read [GPU execution](references/gpu-execution.md)
   before probing or placement. Bind device/model allowlists and resource budgets;
   capacity evidence does not authorize a scientific study.
 - **Repository research:** before planning, resumption, progress or closure, read
   [research management](references/research-management.md) and
   [GitHub workflow](references/github-workflow.md). GitHub is required from study
-  planning through archive closure. Without write authority, produce drafts and
+  planning through archive closure; exploratory runs before a study need only
+  the run ledger. Without write authority, produce drafts and
   report the binding gap; do not claim registration or launch readiness.
 - **Dataset-based development or scientific claims:** use the research route,
   then read [scientific workflow](references/scientific-workflow.md) in full and
@@ -68,6 +75,7 @@ approval; material changes and final acceptance retain their required review.
 
 | Task | Required reference |
 | --- | --- |
+| Launch, record, compare or reproduce a run | [Run ledger](references/run-ledger.md) |
 | Create research records | [Record templates](references/research-records.md) |
 | Delegate, share review or hand off research | [Collaboration](references/collaboration.md) |
 | Produce, consume, reuse, recover or retain research artifacts | [Artifact lifecycle](references/lifecycle.md) |

@@ -75,6 +75,20 @@ computation before claiming a performance improvement.
 [Acceptance scenarios](references/evaluation.md) and [primary-source rationale](references/research-basis.md)
 are maintained in this same repository. No second Skill repository is required.
 
+## Run ledger
+
+`scripts/exp.py` is the everyday entry point: `exp.py run --name <slug> -- <command>`
+binds a run to the exact commit it executed, pins that commit under
+`refs/exp/<run-id>`, and writes one record file to `experiments/ledger/` for
+you to commit, with a local copy pinned under `refs/exp-records/` so that
+cleaning or resetting the working tree cannot lose it. `ls`, `show`, `decide`, `diff` and
+`sync` read, annotate and restore those records. A run whose source could not
+be recovered from its commit is refused. It needs Git and Python 3.8+ only, so
+every agent and server uses the same commands. See the
+[run ledger reference](references/run-ledger.md). `tests/test_exp.py`
+exercises it against temporary repositories; it is not a scheduler or a
+tracker, and the sealed v1 manifests below remain a separate, stricter record.
+
 ## Protocol versus bundled helper
 
 The [ClearML integration](references/clearml-integration.md) defines study/trial/
