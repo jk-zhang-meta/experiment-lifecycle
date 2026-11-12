@@ -61,7 +61,9 @@ snapshot trial from the committed tree before citing it.
   renamed and for runs made on a detached HEAD. A verdict given, or a run
   that ends, while another branch is checked out updates the record file only
   where that branch already holds a copy; otherwise it is saved in the clone
-  and enters the file at the next `sync` on its own branch.
+  and enters the file at the next `sync` on its own branch. If Git cannot
+  store that copy, the file is written where you are instead: move it to
+  its branch and commit it there.
 - Pinned source: `refs/exp/<run-id>` points at the executed commit, so a reset,
   rebase or deleted branch cannot lose the code behind a result.
 - `git push <remote> 'refs/exp/*:refs/exp/*'` shares the pinned commits and
@@ -105,7 +107,7 @@ will not stand still.
   `tmux`, `nohup` or the batch script: the wrapper is the job, and it records
   the exit status when the job ends. An interrupt, a termination or a closed
   terminal is passed on to the command and recorded as `interrupted`; one
-  that arrives before the command exists undoes the launch and leaves no
+  that arrives before the record is written undoes the launch and leaves no
   record. A signal the launcher had ignored, as `nohup` does with a hangup,
   stays ignored for the wrapper and the command. A record
   still marked `running` after its process is gone means the wrapper was

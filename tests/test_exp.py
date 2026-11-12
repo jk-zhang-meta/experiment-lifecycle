@@ -4,6 +4,7 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -27,6 +28,15 @@ def load_exp():
     exp = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(exp)
     return exp
+
+
+def signals(ignored=None):
+    """A preexec_fn that starts a wrapper with default signal handling, whatever this test run
+    inherited (a background job ignores SIGINT, nohup ignores SIGHUP), but for one ignored signal."""
+    def apply():
+        for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            signal.signal(signum, signal.SIG_IGN if signum == ignored else signal.SIG_DFL)
+    return apply
 
 
 def new_repo(path, files):
@@ -59,11 +69,12 @@ class ExpTest(unittest.TestCase):
     def records(self):
         return json.loads(self.exp("ls", "--json").stdout)
 
-    def start(self, name, seconds, *options):
+    def start(self, name, seconds, *options, **pipes):
         """Launch a run that sleeps, and return once its record says it is running."""
         run = subprocess.Popen([PY, EXP, "run", "--name", name, *options, "--", PY, "-c",
-                                f"import time; time.sleep({seconds})"],
-                               cwd=self.repo, env=self.env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                f"import time; time.sleep({seconds})"], cwd=self.repo, env=self.env,
+                               preexec_fn=signals(),
+                               **{"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, **pipes})
         self.addCleanup(run.wait)
         self.addCleanup(run.kill)
         deadline = time.time() + 20
@@ -84,6 +95,22 @@ class ExpTest(unittest.TestCase):
         for leftover in ("experiments/ledger", "runs"):
             directory = os.path.join(self.repo, leftover)
             self.assertEqual(os.listdir(directory) if os.path.isdir(directory) else [], [], leftover)
+
+    def failed_launch(self, exp):
+        """Start a run inside this process, where a test can make the launch fail at a chosen point."""
+        here = os.getcwd()
+        handlers = {signum: signal.getsignal(signum) for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)}
+        os.chdir(self.repo)
+        try:
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(BaseException) as failed:
+                    exp.main(["run", "--name", "late", "--", PY, "-c", "pass"])
+        finally:
+            os.chdir(here)
+            for signum, handler in handlers.items():
+                signal.signal(signum, handler)
+        self.nothing_left()
+        return failed.exception
 
     # --- the binding -------------------------------------------------------------------------
 
@@ -145,6 +172,35 @@ class ExpTest(unittest.TestCase):
                      "submodule 子模块 has uncommitted changes")
         git(os.path.join(self.repo, "子模块"), "checkout", "-q", "--", "lib.py")
         self.refused(self.exp("run", "--name", "s", "--isolate", "--", PY, "-c", "pass"), "cannot populate submodules")
+
+    def test_names_that_are_not_utf8_are_read_as_the_names_they_are(self):
+        odd = os.fsdecode(b"m\xf3dulo")  # Latin-1 bytes, which the NUL-separated listings carry raw
+        library = os.path.join(self._scratch.name, "library")
+        new_repo(library, {"lib.py": "X = 1\n"})
+        try:
+            self.write(odd + ".py", "Y = 1\n")
+        except OSError:
+            self.skipTest("this filesystem takes only UTF-8 names")
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-qm", "a byte-named file")
+        done = self.exp("run", "--name", "iso", "--isolate", "--", PY, "-c", "pass")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn(odd + ".py", os.listdir(os.path.join(self.records()[0]["run_dir"], "src")))
+
+        git(self.repo, "submodule", "add", "-q", library, odd)
+        git(self.repo, "commit", "-qm", "a byte-named submodule")
+        self.write(os.path.join(odd, "lib.py"), "X = 999\n")
+        done = self.exp("run", "--name", "s", "--snapshot", "--", PY, "-c", "pass")
+        self.assertEqual(done.returncode, 2, done.stderr)  # found at its real path, so still refused
+        self.assertIn("has uncommitted changes", done.stderr)
+        self.assertEqual(len(self.records()), 1)
+
+        elsewhere = os.path.join(self._scratch.name, odd)  # a repository that itself lives under such a name
+        new_repo(elsewhere, {".gitignore": "runs/\n"})
+        done = subprocess.run([PY, EXP, "run", "--name", "there", "--", PY, "-c", "pass"], cwd=elsewhere,
+                              env=self.env, capture_output=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn(os.fsencode(elsewhere), done.stdout)  # its paths are printed as the bytes they are
 
     def test_files_hidden_from_git_are_refused(self):
         git(self.repo, "update-index", "--skip-worktree", "train.py")
@@ -284,7 +340,7 @@ class ExpTest(unittest.TestCase):
         for name, signum in (("nohup", signal.SIGHUP), ("background", signal.SIGINT)):  # what nohup and `cmd &` do
             run = subprocess.Popen([PY, EXP, "run", "--name", name, "--", PY, "-c", job], cwd=self.repo, env=self.env,
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                   preexec_fn=lambda: signal.signal(signum, signal.SIG_IGN))
+                                   preexec_fn=signals(ignored=signum))
             self.addCleanup(run.wait)
             self.addCleanup(run.kill)
             deadline = time.time() + 20
@@ -304,8 +360,8 @@ class ExpTest(unittest.TestCase):
         os.chmod(os.path.join(tools, "nvidia-smi"), 0o755)
         env = dict(self.env, PATH=tools + os.pathsep + self.env["PATH"])
         for signum in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
-            run = subprocess.Popen([PY, EXP, "run", "--name", "early", "--", PY, "-c", "pass"], cwd=self.repo,
-                                   env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            run = subprocess.Popen([PY, EXP, "run", "--name", "early", "--", PY, "-c", "pass"], cwd=self.repo, env=env,
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=signals())
             self.addCleanup(run.wait)
             self.addCleanup(run.kill)
             deadline = time.time() + 20
@@ -340,6 +396,42 @@ class ExpTest(unittest.TestCase):
         self.assertEqual(code, 128 + signal.SIGTERM)
         (record,) = self.records()
         self.assertEqual((record["status"], record["exit_code"]), ("interrupted", -signal.SIGTERM))
+
+    def test_a_launch_that_fails_at_an_awkward_moment_leaves_nothing_behind(self):
+        exp = load_exp()
+        written = exp.write_record
+
+        def then_fail(*args, **kwargs):  # the record and its pinned copy exist by now
+            written(*args, **kwargs)
+            raise RuntimeError("after the record was written")
+
+        exp.write_record = then_fail
+        self.assertIsInstance(self.failed_launch(exp), RuntimeError)
+
+        exp = load_exp()
+        claim = exp.claim_run_id
+
+        def then_stop(*args):  # the id's file exists, and the launch has not been told its name yet
+            run_id = claim(*args)
+            os.kill(os.getpid(), signal.SIGTERM)
+            return run_id
+
+        exp.claim_run_id = then_stop
+        self.assertEqual(self.failed_launch(exp).code, 128 + signal.SIGTERM)
+
+        exp = load_exp()
+        record_file = exp.record_file
+
+        def stop_again(*args):  # a second signal, while the stopped launch is being undone
+            os.kill(os.getpid(), signal.SIGTERM)
+            return record_file(*args)
+
+        def stop_once():  # the first one arrives during setup
+            exp.record_file = stop_again
+            os.kill(os.getpid(), signal.SIGTERM)
+
+        exp.gpus = stop_once
+        self.assertEqual(self.failed_launch(exp).code, 128 + signal.SIGTERM)
 
     def test_a_failed_launch_leaves_no_claimed_run_id_behind(self):
         done = self.exp("run", "--name", "nodir", "--runs-dir", "/dev/null/runs", "--", PY, "-c", "pass")
@@ -383,6 +475,15 @@ class ExpTest(unittest.TestCase):
         self.assertEqual((record["status"], record["exit_code"]), ("finished", 0))
         with open(os.path.join(record["run_dir"], "log.txt")) as stream:
             self.assertEqual(len(stream.read().splitlines()), 20000)  # the log is complete even though the reader left
+
+    def test_tee_without_a_standard_output_still_closes_the_record(self):
+        done = subprocess.run([PY, EXP, "run", "--name", "mute", "--tee", "--", PY, "-c", "print('said')"],
+                              cwd=self.repo, env=self.env, stderr=subprocess.PIPE, preexec_fn=lambda: os.close(1))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        (record,) = self.records()
+        self.assertEqual((record["status"], record["exit_code"]), ("finished", 0))
+        with open(os.path.join(record["run_dir"], "log.txt")) as stream:
+            self.assertEqual(stream.read().strip(), "said")
 
     def test_records_survive_cleaning_the_working_tree_and_sync_restores_them(self):
         self.exp("run", "--name", "kept", "--", PY, "-c", REPORT)
@@ -459,6 +560,67 @@ class ExpTest(unittest.TestCase):
         self.exp("sync")
         with open(os.path.join(self.repo, relative)) as stream:
             self.assertEqual(json.load(stream)["status"], "finished")
+
+    def test_a_run_whose_record_was_lost_does_not_write_it_on_another_branch(self):
+        git(self.repo, "checkout", "-q", "-b", "exp/a")
+        run = self.start("lost", 3, "--isolate")
+        (record,) = self.records()
+        os.unlink(os.path.join(self.repo, "experiments", "ledger", record["id"] + ".json"))
+        git(self.repo, "update-ref", "-d", f"refs/exp-records/{record['id']}")
+        git(self.repo, "checkout", "-q", "main")
+        self.assertEqual(run.wait(), 0)
+        self.assertEqual(git(self.repo, "status", "--porcelain"), "")
+        self.assertEqual(self.records()[0]["status"], "finished")  # kept in the clone, for `sync` on exp/a
+
+    def git_that_stores_nothing(self):
+        """Give the wrappers a Git that stores no object once the returned file exists."""
+        tools, broken = os.path.join(self._scratch.name, "bin"), os.path.join(self._scratch.name, "broken")
+        os.makedirs(tools)
+        with open(os.path.join(tools, "git"), "w") as stream:
+            stream.write(f"#!/bin/sh\n[ \"$1\" = hash-object ] && [ -e '{broken}' ] && exit 1\n"
+                         f"exec '{shutil.which('git')}' \"$@\"\n")
+        os.chmod(os.path.join(tools, "git"), 0o755)
+        self.env = dict(self.env, PATH=tools + os.pathsep + self.env["PATH"])
+        return broken
+
+    def ending_on_main(self, name):
+        """A run of branch exp/a, its record committed there, that is still alive after a switch to main."""
+        git(self.repo, "checkout", "-q", "-b", "exp/a")
+        run = self.start(name, 3, "--isolate", stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        path = os.path.join(self.repo, "experiments", "ledger", self.records()[0]["id"] + ".json")
+        git(self.repo, "add", path)
+        git(self.repo, "commit", "-qm", "record the running run")
+        git(self.repo, "checkout", "-q", "main")
+        return run, path
+
+    def test_a_record_git_cannot_pin_is_written_where_the_run_ends(self):
+        broken = self.git_that_stores_nothing()
+        run, path = self.ending_on_main("long")
+        open(broken, "w").close()
+        _, said = run.communicate()
+        self.assertEqual(run.returncode, 0, said)
+        with open(path) as stream:  # main holds no copy and the clone could not keep one
+            self.assertEqual(json.load(stream)["status"], "finished")
+        self.assertIn("move it to branch exp/a", said)
+        self.assertNotIn("saved in this clone", said)  # it is not: only that file holds the result
+
+        os.unlink(path)
+        decided = self.exp("decide", "long", "keep")
+        self.assertIn("could not pin", decided.stderr)
+        self.assertNotIn("saved in this clone", decided.stderr)
+        with open(path) as stream:
+            self.assertEqual(json.load(stream)["decision"], "keep")
+
+    def test_a_record_that_can_be_saved_nowhere_is_reported_and_the_run_still_ends(self):
+        broken = self.git_that_stores_nothing()
+        run, _ = self.ending_on_main("nowhere")
+        self.write("experiments", "in the way of the ledger directory\n")
+        open(broken, "w").close()
+        printed, said = run.communicate()
+        self.assertEqual(run.returncode, 0, said)
+        self.assertIn("finished", printed)
+        self.assertIn("could not be saved anywhere", said)
+        self.assertNotIn("saved in this clone", said)
 
     def test_an_unreadable_record_does_not_break_the_ledger(self):
         self.exp("run", "--name", "good", "--", PY, "-c", "pass")

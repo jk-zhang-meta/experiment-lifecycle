@@ -52,7 +52,8 @@ def die(message, code=2):
 
 
 def git(*args, cwd=None, env=None, check=True):
-    done = subprocess.run(["git", *args], cwd=cwd, env=env, capture_output=True, text=True)
+    # File names are bytes: one that is not UTF-8 must come back as the name it is, not stop the run.
+    done = subprocess.run(["git", *args], cwd=cwd, env=env, capture_output=True, text=True, errors="surrogateescape")
     if check and done.returncode:
         die(f"git {' '.join(args)} failed: {done.stderr.strip()}")
     return done.stdout.strip("\n") if done.returncode == 0 else ""
@@ -109,7 +110,9 @@ def write_file(root, record):
 
 
 def write_record(root, record, to_file=True):
-    """Pin the record inside Git and, unless it belongs to another branch, write its file."""
+    """Pin the record inside Git and, unless it belongs to another branch, write its file. A record
+    that cannot be pinned is written as a file wherever we are, so that it exists somewhere.
+    Returns False when the clone's pinned copy alone holds the record."""
     record["updated"] = time.time()
     if to_file:
         write_file(root, record)
@@ -117,7 +120,17 @@ def write_record(root, record, to_file=True):
                           capture_output=True, text=True)
     if blob.returncode or subprocess.run(["git", "update-ref", f"{RECORD_REFS}/{record['id']}", blob.stdout.strip()],
                                          cwd=root, capture_output=True).returncode:
-        warn(f"could not pin the record of {record['id']} inside Git; commit its file soon")
+        if to_file:
+            warn(f"could not pin the record of {record['id']} inside Git; commit its file soon")
+        else:
+            try:
+                write_file(root, record)
+                warn(f"could not pin the record of {record['id']} inside Git, so its file was written here; "
+                     f"move it to branch {record.get('branch')} and commit it there")
+            except OSError as error:
+                warn(f"the record of {record['id']} could not be saved anywhere: {error}")
+        return True
+    return to_file
 
 
 @contextlib.contextmanager
@@ -318,7 +331,7 @@ def source_moved(root, head, launch_state):
 def belongs_here(root, record):
     """A record file is written where one already is, or on the branch its run was launched from.
     Anywhere else it would collide with that branch's copy at the next checkout or merge."""
-    return record.get("_present", True) or record.get("branch") == current_branch(root)
+    return record.get("_present", False) or record.get("branch") == current_branch(root)
 
 
 def finish(root, record, metrics=None, **fields):
@@ -327,8 +340,7 @@ def finish(root, record, metrics=None, **fields):
         current = next((r for r in load_records(root) if r["id"] == record["id"]), record)
         current.update(fields)
         current["metrics"] = dict(metrics or {}, **current.get("metrics", {}))
-        here = belongs_here(root, current)
-        write_record(root, current, to_file=here)
+        here = write_record(root, current, to_file=belongs_here(root, current))
     if not here:
         warn(f"this run belongs to branch {current.get('branch')}: its record is saved in this clone, and "
              "`exp.py sync` on that branch writes the file")
@@ -383,7 +395,14 @@ def cmd_run(args):
     listen(stop)
     run_id = run_dir = None
     try:
-        run_id = claim_run_id(root, f"{time.strftime('%Y%m%d-%H%M%S', time.gmtime())}-{args.name}-{head[:7]}")
+        # Hold signals back while the id is claimed, so that none lands between its file and its name here.
+        mask = getattr(signal, "pthread_sigmask", None)
+        before = mask(signal.SIG_BLOCK, heard) if mask else None
+        try:
+            run_id = claim_run_id(root, f"{time.strftime('%Y%m%d-%H%M%S', time.gmtime())}-{args.name}-{head[:7]}")
+        finally:
+            if mask:
+                mask(signal.SIG_SETMASK, before)
         run_dir = make_run_dir(root, args.runs_dir, run_id)
         commit = snapshot(root, head, run_id) if changes else head
         # Pin the executed commit so a later reset, rebase or branch deletion cannot lose it.
@@ -406,6 +425,7 @@ def cmd_run(args):
         write_record(root, record)
         listen(forward)
     except BaseException:  # nothing ran: release the claimed id and what was set up for it
+        listen(signal.SIG_IGN)  # a second signal must not stop the release halfway
         if run_id:
             with contextlib.suppress(OSError):
                 os.unlink(record_file(root, run_id))
@@ -420,7 +440,7 @@ def cmd_run(args):
         env["GIT_CEILING_DIRECTORIES"] = os.pathsep.join(
             filter(None, [run_dir, os.environ.get("GIT_CEILING_DIRECTORIES")]))
     log_path = os.path.join(run_dir, "log.txt")
-    began, code, echo = time.time(), None, args.tee
+    began, code, echo = time.time(), None, args.tee and sys.stdout is not None  # None: started with it closed
     with open(log_path, "wb") as log:
         try:
             process = subprocess.Popen(command, cwd=workdir, env=env, stderr=subprocess.STDOUT,
@@ -512,8 +532,7 @@ def cmd_decide(args):
         if args.note is not None:
             r["note"] = args.note
         r["metrics"].update(pairs(args.metric, numeric=True))
-        here = belongs_here(root, r)
-        write_record(root, r, to_file=here)
+        here = write_record(root, r, to_file=belongs_here(root, r))
     print(f"exp: {r['id']} {args.decision}")
     if not here:
         warn(f"this run belongs to branch {r.get('branch')}: the verdict is saved in this clone, and "
@@ -589,6 +608,8 @@ def main(argv=None):
     sync.set_defaults(handler=cmd_sync)
 
     args = parser.parse_args(argv)
+    if hasattr(sys.stdout, "reconfigure"):  # a path that is not UTF-8 is printed as the bytes it is
+        sys.stdout.reconfigure(errors="surrogateescape")
     return args.handler(args)
 
 
